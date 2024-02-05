@@ -14,7 +14,15 @@ Found 21397 images on disk
 Added 21397 new images
 ```
 
-Second step is to classify the photos, this will take a while (read days)
+Before starting the second step, which is the photo description step, you should start the LLaVA server.
+
+```
+(In another terminal window)
+$ cd llavafile
+$ ./llava-v1.5-7b-q4.llamafile   # Starts a server listening on http://localhost:8080
+```
+
+Once the server is running proceed with the second step. This will take a while (read days)
 
 ```
 $ go run ./cmd/henri
@@ -40,3 +48,13 @@ Processing 16/21397 <1326: 1694A0F2-D116-4A4E-AF3D-BB40179BB0AC_1_102_o.jpeg> ok
 ```
 
 The utility assumes that the LLaVA server is available at `http://localhost:8080` and has a `POST /completion` endpoint that accepts `JSON` requests. You can use the `--server` option to specify a new server host and port.
+
+## LLaVA
+
+You will need to install and run the LLaVA model for yourself. For simplicity I used the [llamafile](https://github.com/Mozilla-Ocho/llamafile) variant, which is a single executable that embeds llama.cpp running as a server and the GGUF model parameters. Variant I [used](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/blob/main/llava-v1.5-7b-q4.llamafile).
+
+## TODOs
+
+- Proper database schema migration
+- Switch timestamps in DB to integers? e.g. `approved_ts BIGINT NOT NULL DEFAULT (strftime('%s', 'now'))`
+- Thumbnail generation?

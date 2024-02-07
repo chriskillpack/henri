@@ -1,10 +1,12 @@
 package henri
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"net/http"
 	"strings"
@@ -59,7 +61,8 @@ func Init(srvAddr string, seed int) {
 }
 
 func Prompt(ctx context.Context, query string) (string, error) {
-	return sendRequest(ctx, queryPrompt("tell me a story"), map[string]any{})
+	// Prompt doesn't have to be a streaming request, just kicking the tires of that code path
+	return sendRequest(ctx, queryPrompt(query), true, map[string]any{})
 }
 
 func IsHealthy() bool {
@@ -73,7 +76,7 @@ func IsHealthy() bool {
 
 func DescribeImage(ctx context.Context, image []byte) (string, error) {
 	imb64 := base64.StdEncoding.EncodeToString(image)
-	return sendRequest(ctx, imagePreamble+"[img-10]please describe this image in detail"+imageSuffix, jsonmap{
+	return sendRequest(ctx, imagePreamble+"[img-10]please describe this image in detail"+imageSuffix, false, jsonmap{
 		"image_data": []jsonmap{
 			{
 				"data": imb64, "id": 10,
@@ -87,10 +90,11 @@ func queryPrompt(prompt string) string {
 	return promptPreamble + prompt + promptSuffix
 }
 
-func sendRequest(ctx context.Context, prompt string, keys jsonmap) (string, error) {
+func sendRequest(ctx context.Context, prompt string, stream bool, keys jsonmap) (string, error) {
 	data := maps.Clone(defaultparams)
 	maps.Copy(data, keys)
 	data["prompt"] = prompt
+	data["stream"] = stream
 
 	buf := bytes.NewBuffer(make([]byte, 0, 2_000_000)) // The buffer will be resized by Encode
 	enc := json.NewEncoder(buf)
@@ -113,13 +117,37 @@ func sendRequest(ctx context.Context, prompt string, keys jsonmap) (string, erro
 	}
 	defer resp.Body.Close()
 
-	dec := json.NewDecoder(resp.Body)
+	content := new(bytes.Buffer)
 	respbody := struct {
 		Content string
+		Stop    bool
 	}{}
-	if err := dec.Decode(&respbody); err != nil {
-		return "", err
+
+	lr := bufio.NewScanner(resp.Body)
+	for !respbody.Stop {
+		// Read in one line
+		if !lr.Scan() {
+			return "", lr.Err()
+		}
+		line := lr.Text()
+		// TODO: Is there a way to eliminate this check? The empty line appears after a JSON body
+		if len(line) == 0 {
+			continue
+		}
+		if stream {
+			var found bool
+			line, found = strings.CutPrefix(line, "data: ")
+			if !found {
+				return "", fmt.Errorf("missing `data: ` prefix")
+			}
+		}
+
+		dec := json.NewDecoder(bytes.NewBufferString(line))
+		if err := dec.Decode(&respbody); err != nil {
+			return "", err
+		}
+		content.WriteString(respbody.Content)
 	}
 
-	return strings.TrimLeft(respbody.Content, " "), nil
+	return strings.TrimLeft(content.String(), " "), nil
 }

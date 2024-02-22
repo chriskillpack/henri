@@ -114,6 +114,7 @@ out:
 		img.Description, err = henri.DescribeImage(ctx, imgdata)
 		if err != nil {
 			// TODO - set attempted at and move on
+			_ = db.UpdateImageAttempted(ctx, img.Id, now) // ignore error, already in an error state
 
 			// Allow up to 5 errors before bailing
 			errcnt++

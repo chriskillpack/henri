@@ -23,8 +23,8 @@ endif
 all: $(OUTPUT_FILE)
 
 # Build the dynamic library
-$(OUTPUT_FILE): fts5.c
-	$(CC) $(LDFLAGS) -o $(OUTPUT_FILE) fts5.c
+$(OUTPUT_FILE): fts5.c fts5.h sqlite3.h sqlite3ext.h
+	$(CC) -fPIC $(LDFLAGS) -o $(OUTPUT_FILE) fts5.c
 
 clean:
 	rm -f $(OUTPUT_FILE)

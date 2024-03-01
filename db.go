@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 //go:embed schema.sql
@@ -38,7 +38,7 @@ func (db *DB) Close() {
 }
 
 func NewDB(fname string) (*DB, error) {
-	db, err := sql.Open("sqlite3", fname)
+	db, err := sql.Open("sqlite", fname)
 	if err != nil {
 		return nil, err
 	}

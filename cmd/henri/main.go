@@ -47,11 +47,11 @@ func findJpegFiles(root string) ([]string, []time.Time, error) {
 
 func run(ctx context.Context, dbpath string) error {
 	// Is the server healthy?
-	if !henri.IsHealthy() {
-		return fmt.Errorf("server is not responding")
-	}
+	// if !henri.IsHealthy() {
+	// 	return fmt.Errorf("server is not responding")
+	// }
 
-	db, err := henri.NewDB(dbpath)
+	db, err := henri.NewDB(ctx, dbpath)
 	if err != nil {
 		return err
 	}

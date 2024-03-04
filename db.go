@@ -171,11 +171,6 @@ func (db *DB) applyMigrations(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// If the migrations table doesn't exist (which we infer from migs being nil) then
-	// assume that the DB is empty and attempt to apply the latest schema.
-	if migs == nil {
-		return db.applyLatestSchema(ctx, sqlSchema)
-	}
 
 	// Sort the applied migrations in ascending order
 	slices.SortFunc(migs, migSort)
@@ -186,6 +181,18 @@ func (db *DB) applyMigrations(ctx context.Context) error {
 		return err
 	}
 	slices.SortFunc(fsmigs, migSort)
+
+	// If the migrations table doesn't exist (which we infer from migs being
+	// nil) then assume that the DB is empty and attempt to apply the latest
+	// schema.
+	if migs == nil {
+		// We include fsmigs so they can be inserted into the migrations table.
+		// This prevents the migration logic from attempting to apply migrations
+		// on the next start after the fast forward on this go through.
+		// Note: this assumes that the latest schema is equal to applying all
+		// of the migrations in turn. This is on the developer to ensure.
+		return db.applyLatestSchema(ctx, sqlSchema, fsmigs)
+	}
 
 	// If there are migrations to be applied then backup the DB
 	if len(fsmigs) > len(migs) {
@@ -214,7 +221,7 @@ func (db *DB) applyMigrations(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := db.ApplyMigration(ctx, string(migddl), fsmigs[i]); err != nil {
+		if err := db.applyMigration(ctx, string(migddl), fsmigs[i]); err != nil {
 			fmt.Println(", error:", err, "aborting")
 			return err
 		}
@@ -274,7 +281,7 @@ func (db *DB) allAppliedMigrations(ctx context.Context) ([]string, error) {
 	return migs, nil
 }
 
-func (db *DB) ApplyMigration(ctx context.Context, ddl string, migname string) error {
+func (db *DB) applyMigration(ctx context.Context, ddl string, migname string) error {
 	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -293,7 +300,7 @@ func (db *DB) ApplyMigration(ctx context.Context, ddl string, migname string) er
 	return tx.Commit()
 }
 
-func (db *DB) applyLatestSchema(ctx context.Context, schema string) error {
+func (db *DB) applyLatestSchema(ctx context.Context, schema string, migs []string) error {
 	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -303,6 +310,11 @@ func (db *DB) applyLatestSchema(ctx context.Context, schema string) error {
 	_, err = tx.ExecContext(ctx, schema)
 	if err != nil {
 		return err
+	}
+	for _, mig := range migs {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO migrations (name) VALUES ($1)", mig); err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()

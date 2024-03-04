@@ -167,7 +167,7 @@ func (db *DB) UpdateImageAttempted(ctx context.Context, id int, at time.Time) er
 }
 
 func (db *DB) applyMigrations(ctx context.Context) error {
-	migs, err := db.allAppliedMigrations(ctx)
+	migs, emptyDB, err := db.allAppliedMigrations(ctx)
 	if err != nil {
 		return err
 	}
@@ -182,10 +182,8 @@ func (db *DB) applyMigrations(ctx context.Context) error {
 	}
 	slices.SortFunc(fsmigs, migSort)
 
-	// If the migrations table doesn't exist (which we infer from migs being
-	// nil) then assume that the DB is empty and attempt to apply the latest
-	// schema.
-	if migs == nil {
+	// If the DB is empty and attempt to apply the latest schema.
+	if emptyDB {
 		// We include fsmigs so they can be inserted into the migrations table.
 		// This prevents the migration logic from attempting to apply migrations
 		// on the next start after the fast forward on this go through.
@@ -248,37 +246,37 @@ func migSort(a, b string) int {
 	return d
 }
 
-func (db *DB) allAppliedMigrations(ctx context.Context) ([]string, error) {
+func (db *DB) allAppliedMigrations(ctx context.Context) ([]string, bool, error) {
 	// Does the schema_migrations table exist?
 	row := db.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='migrations'")
 	var success int
 	err := row.Scan(&success)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if success == 0 {
-		return nil, nil // should be interpreted as "apply the latest schema directly"
+		return nil, true, nil // should be interpreted as "apply the latest schema directly"
 	}
 
 	rows, err := db.db.QueryContext(ctx, "SELECT name FROM migrations")
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
 
-	migs := make([]string, 0, 10)
+	var migs []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		migs = append(migs, name)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return migs, nil
+	return migs, false, nil
 }
 
 func (db *DB) applyMigration(ctx context.Context, ddl string, migname string) error {

@@ -281,11 +281,11 @@ func (db *DB) ApplyMigration(ctx context.Context, ddl string, migname string) er
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(ddl)
+	_, err = tx.ExecContext(ctx, ddl)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec("INSERT INTO migrations (name) VALUES ($1)", migname)
+	_, err = tx.ExecContext(ctx, "INSERT INTO migrations (name) VALUES ($1)", migname)
 	if err != nil {
 		return err
 	}
@@ -300,7 +300,7 @@ func (db *DB) applyLatestSchema(ctx context.Context, schema string) error {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(schema)
+	_, err = tx.ExecContext(ctx, schema)
 	if err != nil {
 		return err
 	}

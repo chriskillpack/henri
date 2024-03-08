@@ -65,7 +65,7 @@ func run(ctx context.Context, dbpath string) error {
 			return err
 		}
 		fmt.Printf("Found %d images on disk\n", len(photos))
-		added, err := db.InsertImagePaths(ctx, photos, mtimes)
+		added, err := db.InsertImagePaths(ctx, photos, mtimes, 100)
 		if err != nil {
 			return err
 		}

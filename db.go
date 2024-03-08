@@ -62,8 +62,8 @@ func NewDB(ctx context.Context, fname string) (*DB, error) {
 	return db, nil
 }
 
-func (db *DB) InsertImagePaths(ctx context.Context, filepaths []string, mtimes []time.Time) (int, error) {
-	const batchSize = 100
+func (db *DB) InsertImagePaths(ctx context.Context, filepaths []string, mtimes []time.Time, batchSize int) (int, error) {
+	// const batchSize = 100
 
 	if len(filepaths) != len(mtimes) {
 		return 0, fmt.Errorf("filepaths and mtimes lengths do not match")
@@ -114,6 +114,40 @@ func (db *DB) InsertImagePaths(ctx context.Context, filepaths []string, mtimes [
 	}
 
 	return affected, txn.Commit()
+}
+
+func (db *DB) InsertImagePathsSingle(ctx context.Context, filepaths []string, mtimes []time.Time) error {
+	if len(filepaths) != len(mtimes) {
+		return fmt.Errorf("filepaths and mtimes lengths do not match")
+	}
+
+	for i := range filepaths {
+		if _, err := db.db.ExecContext(ctx, "INSERT OR IGNORE INTO images (image_path, image_mtime) VALUES (?,?)", filepaths[i], mtimes[i]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (db *DB) InsertImagePathsSingleTxn(ctx context.Context, filepaths []string, mtimes []time.Time) error {
+	if len(filepaths) != len(mtimes) {
+		return fmt.Errorf("filepaths and mtimes lengths do not match")
+	}
+
+	txn, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	for i := range filepaths {
+		if _, err := txn.ExecContext(ctx, "INSERT OR IGNORE INTO images (image_path, image_mtime) VALUES (?,?)", filepaths[i], mtimes[i]); err != nil {
+			return err
+		}
+	}
+
+	return txn.Commit()
 }
 
 func (db *DB) ImagesToDescribe(ctx context.Context) ([]*Image, error) {

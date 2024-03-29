@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const count = 40000
+
 func benchmarkInsertImagePaths(b *testing.B, batchSize int) {
 	ctx := context.Background()
 	db, err := NewDB(ctx, ":memory:")
@@ -15,8 +17,8 @@ func benchmarkInsertImagePaths(b *testing.B, batchSize int) {
 	b.ResetTimer()
 
 	for n := 0; n < b.N; n++ {
-		filepaths := make([]string, b.N)
-		mtimes := make([]time.Time, b.N)
+		filepaths := make([]string, count)
+		mtimes := make([]time.Time, count)
 
 		db.InsertImagePaths(ctx, filepaths, mtimes, batchSize)
 	}
@@ -36,8 +38,8 @@ func BenchmarkInsertImagePathSingle(b *testing.B) {
 	b.ResetTimer()
 
 	for n := 0; n < b.N; n++ {
-		filepaths := make([]string, b.N)
-		mtimes := make([]time.Time, b.N)
+		filepaths := make([]string, count)
+		mtimes := make([]time.Time, count)
 
 		db.InsertImagePathsSingle(ctx, filepaths, mtimes)
 	}
@@ -52,8 +54,8 @@ func BenchmarkInsertImagePathSingleTxn(b *testing.B) {
 	b.ResetTimer()
 
 	for n := 0; n < b.N; n++ {
-		filepaths := make([]string, b.N)
-		mtimes := make([]time.Time, b.N)
+		filepaths := make([]string, count)
+		mtimes := make([]time.Time, count)
 
 		db.InsertImagePathsSingleTxn(ctx, filepaths, mtimes)
 	}

@@ -53,8 +53,15 @@ The utility assumes that the LLaVA server is available at `http://localhost:8080
 
 You will need to install and run the LLaVA model for yourself. For simplicity I used the [llamafile](https://github.com/Mozilla-Ocho/llamafile) variant, which is a single executable that embeds llama.cpp running as a server and the GGUF model parameters. Variant I [used](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/blob/main/llava-v1.5-7b-q4.llamafile).
 
+## Database Migrations
+
+Henri will apply pending database migrations at startup. At this time only "up" migrations are supported. Migrations are SQL DDL statements stored in `X_descriptive_name.sql` files in the `db/migrations` folder, where `X` is an integer ordering key with lower numbered migrations applied first. All pending migrations will be applied one after the other, each in a separate DB transaction. Any error will abort any unapplied migrations.
+
+Prior to applying pending migrations a backup of the database file will be created with a timestamped file name. The backup filename is printed to stdout.
+
+If no existing database exists, the processing of the migration files will be skipped and instead `db/latest_schema.sql` will be applied directly. It is important to keep this file up to date with DDL changes in the migrations folder. This fast-forwarding behavior is to reduce DB setup in tests.
+
 ## TODOs
 
-- Proper database schema migration
 - Switch timestamps in DB to integers? e.g. `approved_ts BIGINT NOT NULL DEFAULT (strftime('%s', 'now'))`
 - Thumbnail generation?

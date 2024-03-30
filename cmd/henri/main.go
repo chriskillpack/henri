@@ -47,9 +47,9 @@ func findJpegFiles(root string) ([]string, []time.Time, error) {
 
 func run(ctx context.Context, dbpath string) error {
 	// Is the server healthy?
-	// if !henri.IsHealthy() {
-	// 	return fmt.Errorf("server is not responding")
-	// }
+	if !henri.IsHealthy() {
+		return fmt.Errorf("server is not responding")
+	}
 
 	db, err := henri.NewDB(ctx, dbpath)
 	if err != nil {
@@ -65,7 +65,8 @@ func run(ctx context.Context, dbpath string) error {
 			return err
 		}
 		fmt.Printf("Found %d images on disk\n", len(photos))
-		added, err := db.InsertImagePaths(ctx, photos, mtimes, 100)
+		const batchSize = 100
+		added, err := db.InsertImagePaths(ctx, photos, mtimes, batchSize)
 		if err != nil {
 			return err
 		}

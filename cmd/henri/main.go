@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	libraryPath = flag.String("library", "", "Path to photos library")
-	dbPath      = flag.String("db", "./henri.db", "Path to database")
-	llamaServer = flag.String("server", "http://localhost:8080", "Address of running llama server")
-	llamaSeed   = flag.Int("seed", 385480504, "Random seed to llama")
+	libraryPath  = flag.String("library", "", "Path to photos library")
+	dbPath       = flag.String("db", "./henri.db", "Path to database")
+	ollamaServer = flag.String("ollama", "http://localhost:11434", "Address of running ollama server")
+	llamaServer  = flag.String("llama", "http://localhost:8080", "Address of running llama server")
+	llamaSeed    = flag.Int("seed", 385480504, "Random seed to llama")
 
 	lameduck bool
 )
@@ -45,9 +46,9 @@ func findJpegFiles(root string) ([]string, []time.Time, error) {
 	return photos, mtimes, err
 }
 
-func run(ctx context.Context, dbpath string) error {
+func run(ctx context.Context, h *henri.Henri, dbpath string) error {
 	// Is the server healthy?
-	if !henri.IsHealthy() {
+	if !h.IsHealthy() {
 		return fmt.Errorf("server is not responding")
 	}
 
@@ -112,7 +113,7 @@ out:
 			}
 			return err
 		}
-		img.Description, err = henri.DescribeImage(ctx, imgdata)
+		img.Description, err = h.DescribeImage(ctx, imgdata)
 		if err != nil {
 			// TODO - set attempted at and move on
 			_ = db.UpdateImageAttempted(ctx, img.Id, now) // ignore error, already in an error state
@@ -151,7 +152,18 @@ func sighandler(ch chan os.Signal, cancel context.CancelFunc) {
 
 func main() {
 	flag.Parse()
-	henri.Init(*llamaServer, *llamaSeed)
+	hio := henri.InitOptions{
+		LlamaServer:  *llamaServer,
+		LlamaSeed:    *llamaSeed,
+		OllamaServer: *ollamaServer,
+	}
+	var (
+		h   *henri.Henri
+		err error
+	)
+	if h, err = henri.Init(hio); err != nil {
+		log.Fatal(err)
+	}
 
 	sigch := make(chan os.Signal, 2)
 	signal.Notify(sigch, os.Interrupt)
@@ -159,7 +171,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	go sighandler(sigch, cancel)
 
-	if err := run(ctx, *dbPath); err != nil {
+	if err := run(ctx, h, *dbPath); err != nil {
 		log.Fatal(err)
 	}
 }

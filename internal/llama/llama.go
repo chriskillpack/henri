@@ -10,6 +10,8 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+
+	"github.com/chriskillpack/henri/describer"
 )
 
 const (
@@ -53,6 +55,8 @@ type llama struct {
 	srvAddr string
 	seed    int
 }
+
+var _ describer.Describer = &llama{}
 
 func Init(srvAddr string, seed int) *llama {
 	return &llama{

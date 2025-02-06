@@ -26,11 +26,15 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/chriskillpack/henri/describer"
 )
 
 type ollama struct {
 	srvAddr string
 }
+
+var _ describer.Describer = &ollama{}
 
 func Init(srvAddr string) *ollama {
 	return &ollama{srvAddr: srvAddr}

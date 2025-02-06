@@ -105,7 +105,7 @@ out:
 			// Skip missing file errors
 			if _, ok := err.(*fs.PathError); ok {
 				fmt.Println("file error, skipping")
-				err = db.UpdateImageAttempted(ctx, img.Id, now)
+				err = db.UpdateImageAttempted(ctx, img.Id, h.Describer.Name(), now)
 				if err != nil {
 					errcnt++
 				}
@@ -116,7 +116,7 @@ out:
 		img.Description, err = h.Describer.DescribeImage(ctx, imgdata)
 		if err != nil {
 			// TODO - set attempted at and move on
-			_ = db.UpdateImageAttempted(ctx, img.Id, now) // ignore error, already in an error state
+			_ = db.UpdateImageAttempted(ctx, img.Id, h.Describer.Name(), now) // ignore error, already in an error state
 
 			// Allow up to 5 errors before bailing
 			errcnt++
@@ -126,7 +126,7 @@ out:
 		} else {
 			end := time.Now()
 			img.ProcessedAt = now
-			db.UpdateImage(ctx, img)
+			db.UpdateImage(ctx, img, h.Describer.Name())
 			fmt.Printf("okay, %d secs", int(end.Sub(now).Seconds()))
 		}
 		fmt.Println()

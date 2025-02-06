@@ -28,6 +28,14 @@ var schema = &squibble.Schema{
 				`DROP TABLE IF EXISTS migrations`,
 			),
 		},
+
+		{
+			Source: "483128f2721d69153684ba823861680c7c534ae548a3a8a1010d1372d8c7c58c",
+			Target: "fd6688375b27315dc86feda5caa174bbde47205a0485eb3ff23f34c4e17d573f",
+			Apply: squibble.Exec(
+				`ALTER TABLE images ADD describer VARCHAR`,
+			),
+		},
 	},
 }
 
@@ -190,19 +198,21 @@ func (db *DB) ImagesToDescribe(ctx context.Context) ([]*Image, error) {
 	return images, nil
 }
 
-func (db *DB) UpdateImage(ctx context.Context, img *Image) error {
+func (db *DB) UpdateImage(ctx context.Context, img *Image, describer string) error {
 	_, err := db.db.ExecContext(ctx,
-		"UPDATE images SET image_description=$1,processed_at=$2 WHERE id=$3",
+		"UPDATE images SET image_description=$1,describer=$2,processed_at=$3 WHERE id=$4",
 		img.Description,
+		describer,
 		img.ProcessedAt.Format(time.DateTime),
 		img.Id)
 	return err
 }
 
-func (db *DB) UpdateImageAttempted(ctx context.Context, id int, at time.Time) error {
+func (db *DB) UpdateImageAttempted(ctx context.Context, id int, describer string, at time.Time) error {
 	_, err := db.db.ExecContext(ctx,
-		"UPDATE images SET attempted_at=$1 WHERE id=$2",
+		"UPDATE images SET attempted_at=$1,describer=$2 WHERE id=$3",
 		at.Format(time.DateTime),
+		describer,
 		id)
 	return err
 }

@@ -11,9 +11,22 @@ curl http://localhost:11434/api/generate -d '{
 }'
 
 We should make sure the prompt matches llama "please describe this image in detail"
+
+{"model":"llava","created_at":"2025-02-06T06:07:42.298556Z","response":" In the heart of a cozy living room, a man and woman are captured in a moment of familial bliss. The man, donned in a gray hoodie, stands to the left of the frame. His companion on the right is clad in a black cardigan. They both share a warm smile, their happiness palpable even through the lens of the camera.\n\nThe room around them is inviting and lived-in. A white wall serves as the backdrop for this family portrait. Adjacent to it hangs a painting, adding an artistic touch to the space. \n\nTo the left of the frame, a table draped with a vibrant red tablecloth stands. It's a simple yet charming detail that adds depth to the image. On the right side of the photo, a plant adds a touch of nature indoors, its green leaves contrasting beautifully with the room's interior decor.\n\nEvery object and person in this image contributes to painting a picture of a warm and loving family enjoying quality time together. ","done":true,"done_reason":"stop","context":[733,16289,28793,733,5422,28733,28734,28793,13,13,792,555,6685,456,3469,297,8291,733,28748,16289,28793,560,272,3031,302,264,1001,2140,3687,2003,28725,264,676,304,2971,460,13382,297,264,2470,302,3923,505,843,815,28723,415,676,28725,949,12097,297,264,11870,21224,412,28725,10969,298,272,1749,302,272,4108,28723,2354,19377,356,272,1103,349,533,316,297,264,2687,4148,9264,28723,1306,1560,4098,264,6100,6458,28725,652,15079,4785,28720,522,1019,1059,272,19642,302,272,7555,28723,13,13,1014,2003,1401,706,349,1304,4328,304,6262,28733,262,28723,330,3075,3500,14449,390,272,852,8347,354,456,2005,22087,28723,1964,28768,15352,298,378,9644,28713,264,11514,28725,8833,396,20925,4814,298,272,2764,28723,28705,13,13,1551,272,1749,302,272,4108,28725,264,2401,26093,286,395,264,13546,440,2760,2401,512,999,10969,28723,661,28742,28713,264,3588,2783,25444,8291,369,13633,8478,298,272,3469,28723,1418,272,1103,2081,302,272,8428,28725,264,5100,13633,264,4814,302,4735,1176,28709,734,28725,871,5344,8049,9349,288,27088,395,272,2003,28742,28713,11154,8059,28723,13,13,13852,1928,304,1338,297,456,3469,679,4302,298,11514,264,5754,302,264,6100,304,16276,2005,16269,4045,727,2553,28723,28705],"total_duration":18408815000,"load_duration":19164584,"prompt_eval_count":595,"prompt_eval_duration":393000000,"eval_count":223,"eval_duration":17990000000}
+
 */
 
-import "context"
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+)
 
 type ollama struct {
 	srvAddr string
@@ -26,11 +39,80 @@ func Init(srvAddr string) *ollama {
 func (o *ollama) Name() string { return "ollama" }
 
 func (o *ollama) DescribeImage(ctx context.Context, image []byte) (string, error) {
-	panic("Not implemented yet")
-	return "", nil
+	imb64 := base64.StdEncoding.EncodeToString(image)
+
+	data := map[string]any{
+		"model":  "llava",
+		"prompt": "please describe this image in detail",
+		"stream": false,
+		"images": []string{imb64},
+	}
+	var (
+		description string
+		err         error
+	)
+	if description, err = o.sendRequest(ctx, http.MethodPost, "/api/generate", data); err != nil {
+		return "", err
+	}
+
+	return description, nil
 }
 
 func (o *ollama) IsHealthy() bool {
-	panic("Not implemented yet")
-	return true
+	_, err := o.sendRequest(context.TODO(), http.MethodHead, "/", nil)
+	return err == nil
+}
+
+func (o *ollama) sendRequest(ctx context.Context, method, path string, reqData any) (string, error) {
+	var reqBody io.Reader
+
+	switch reqData.(type) {
+	case nil:
+		// no-op
+	default:
+		data, err := json.Marshal(reqData)
+		if err != nil {
+			return "", err
+		}
+		reqBody = bytes.NewReader(data)
+	}
+
+	reqPath, err := url.JoinPath(o.srvAddr, path)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, reqPath, reqBody)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if len(respBody) > 0 {
+		out := struct {
+			Response   string `json:"response"`
+			Done       bool   `json:"done"`
+			DoneReason string `json:"done_reason"`
+		}{}
+		if err := json.Unmarshal(respBody, &out); err != nil {
+			return "", err
+		}
+		if !out.Done || out.DoneReason != "stop" {
+			return "", fmt.Errorf("unexpected done and done_reason: %t, %s", out.Done, out.DoneReason)
+		}
+
+		return strings.TrimLeft(out.Response, " "), nil
+	}
+
+	return "", nil
 }

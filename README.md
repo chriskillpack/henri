@@ -49,9 +49,33 @@ Processing 16/21397 <1326: 1694A0F2-D116-4A4E-AF3D-BB40179BB0AC_1_102_o.jpeg> ok
 
 The utility assumes that the LLaVA server is available at `http://localhost:8080` and has a `POST /completion` endpoint that accepts `JSON` requests. You can use the `--server` option to specify a new server host and port.
 
-## LLaVA
+## LLM runners
 
-You will need to install and run the LLaVA model for yourself. For simplicity I used the [llamafile](https://github.com/Mozilla-Ocho/llamafile) variant, which is a single executable that embeds llama.cpp running as a server and the GGUF model parameters. Variant I [used](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/blob/main/llava-v1.5-7b-q4.llamafile).
+Henri makes HTTP calls to servers that run LLMs so in theory it can work with any LLM. In practice though each server has different URls or request/response schemas. Currently Henri will work with a llama.cpp webserver such as [llamafile]((https://github.com/Mozilla-Ocho/llamafile) or [ollama](https://ollama.com/) webserver.
+
+### ollama
+
+Now my preferred way of running LLMs, simply because of it's industry support and turnkey installation and model acquisition. Once you are installed ollama.ai make sure you download the llava model as this will be requested directly.
+
+```
+ollama pull llava
+```
+
+Provide the ollama server
+
+```
+go run ./cmd/henri --ollama http://url.to.server:port
+```
+
+### llamafile
+
+You will need to install and run the LLaVA model for yourself. For simplicity I used the llamafile implementation, which is a single executable that embeds llama.cpp running as a server and the GGUF model parameters. Model variant I [used](https://huggingface.co/jartine/llava-v1.5-7B-GGUF/blob/main/llava-v1.5-7b-q4.llamafile).
+
+Specify the llamafile server
+
+```
+go run ./cmd/henri --llama http://url.to.server:port
+```
 
 ## Database Migrations
 

@@ -47,26 +47,31 @@ var defaultparams = jsonmap{
 	"grammar":           "",
 	"slot_id":           -1,
 	"cache_prompt":      true,
-	"seed":              llamaSeed,
 }
 
-var (
-	llamaSeed    int
-	llamaSrvAddr string
-)
-
-func Init(srvAddr string, seed int) {
-	llamaSrvAddr = srvAddr
-	llamaSeed = seed
+type llama struct {
+	srvAddr string
+	seed    int
 }
 
-func Prompt(ctx context.Context, query string) (string, error) {
+func Init(srvAddr string, seed int) *llama {
+	return &llama{
+		srvAddr: srvAddr,
+		seed:    seed,
+	}
+}
+
+/*
+func prompt(ctx context.Context, query string) (string, error) {
 	// Prompt doesn't have to be a streaming request, just kicking the tires of that code path
-	return sendRequest(ctx, queryPrompt(query), true, map[string]any{})
+	return l.sendRequest(ctx, queryPrompt(query), true, map[string]any{})
 }
+*/
 
-func IsHealthy() bool {
-	resp, err := http.Get(llamaSrvAddr)
+func (l *llama) Name() string { return "llama" }
+
+func (l *llama) IsHealthy() bool {
+	resp, err := http.Get(l.srvAddr)
 	if err != nil {
 		return false
 	}
@@ -74,9 +79,9 @@ func IsHealthy() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-func DescribeImage(ctx context.Context, image []byte) (string, error) {
+func (l *llama) DescribeImage(ctx context.Context, image []byte) (string, error) {
 	imb64 := base64.StdEncoding.EncodeToString(image)
-	return sendRequest(ctx, imagePreamble+"[img-10]please describe this image in detail"+imageSuffix, false, jsonmap{
+	return l.sendRequest(ctx, imagePreamble+"[img-10]please describe this image in detail"+imageSuffix, false, jsonmap{
 		"image_data": []jsonmap{
 			{
 				"data": imb64, "id": 10,
@@ -90,11 +95,12 @@ func queryPrompt(prompt string) string {
 	return promptPreamble + prompt + promptSuffix
 }
 
-func sendRequest(ctx context.Context, prompt string, stream bool, keys jsonmap) (string, error) {
+func (l *llama) sendRequest(ctx context.Context, prompt string, stream bool, keys jsonmap) (string, error) {
 	data := maps.Clone(defaultparams)
 	maps.Copy(data, keys)
 	data["prompt"] = prompt
 	data["stream"] = stream
+	data["seed"] = l.seed
 
 	buf := bytes.NewBuffer(make([]byte, 0, 2_000_000)) // The buffer will be resized by Encode
 	enc := json.NewEncoder(buf)
@@ -105,7 +111,7 @@ func sendRequest(ctx context.Context, prompt string, stream bool, keys jsonmap) 
 	}
 	br := bytes.NewReader(buf.Bytes())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, llamaSrvAddr+"/completion", br)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, l.srvAddr+"/completion", br)
 	if err != nil {
 		return "", err
 	}

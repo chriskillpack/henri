@@ -18,9 +18,9 @@ import (
 var (
 	libraryPath  = flag.String("library", "", "Path to photos library")
 	dbPath       = flag.String("db", "./henri.db", "Path to database")
-	ollamaServer = flag.String("ollama", "http://localhost:11434", "Address of running ollama server")
-	llamaServer  = flag.String("llama", "http://localhost:8080", "Address of running llama server")
+	llamaServer  = flag.String("llama", "", "Address of running llama server, typically http://localhost:8080")
 	llamaSeed    = flag.Int("seed", 385480504, "Random seed to llama")
+	ollamaServer = flag.String("ollama", "", "Address of running ollama server, typically http://localhost:11434")
 
 	lameduck bool
 )
@@ -48,7 +48,7 @@ func findJpegFiles(root string) ([]string, []time.Time, error) {
 
 func run(ctx context.Context, h *henri.Henri, dbpath string) error {
 	// Is the server healthy?
-	if !h.IsHealthy() {
+	if !h.Describer.IsHealthy() {
 		return fmt.Errorf("server is not responding")
 	}
 
@@ -79,7 +79,7 @@ func run(ctx context.Context, h *henri.Henri, dbpath string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%d images to process\n", len(images))
+	fmt.Printf("%d images to process\nClassifying with %s\n", len(images), h.Describer.Name())
 
 	errcnt := 0
 out:
@@ -113,7 +113,7 @@ out:
 			}
 			return err
 		}
-		img.Description, err = h.DescribeImage(ctx, imgdata)
+		img.Description, err = h.Describer.DescribeImage(ctx, imgdata)
 		if err != nil {
 			// TODO - set attempted at and move on
 			_ = db.UpdateImageAttempted(ctx, img.Id, now) // ignore error, already in an error state

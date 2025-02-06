@@ -19,6 +19,16 @@ var dbSchema string
 
 var schema = &squibble.Schema{
 	Current: dbSchema,
+
+	Updates: []squibble.UpdateRule{
+		{
+			Source: "5a9671c04c8b8a28c0d7d7ff6ad328f1890c7e3b891bffb0f77f9a966ed51978",
+			Target: "483128f2721d69153684ba823861680c7c534ae548a3a8a1010d1372d8c7c58c",
+			Apply: squibble.Exec(
+				`DROP TABLE IF EXISTS migrations`,
+			),
+		},
+	},
 }
 
 type DB struct {

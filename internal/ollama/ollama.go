@@ -38,7 +38,7 @@ type ollama struct {
 var _ describer.Describer = &ollama{}
 
 func Init(srvAddr string, httpClient *http.Client) *ollama {
-	return &ollama{srvAddr: srvAddr}
+	return &ollama{srvAddr, httpClient}
 }
 
 func (o *ollama) Name() string { return "ollama" }
@@ -81,18 +81,23 @@ func (o *ollama) Embeddings(description string) ([]float32, error) {
 		Model string `json:"model"`
 		Input string `json:"input"`
 	}{
-		Model: "llama",
+		Model: "llava",
 		Input: description,
 	}
 
 	respData := struct {
+		Embeddings [][]float32 `json:"embeddings"`
 	}{}
 
 	if err := o.sendRequest(context.TODO(), http.MethodPost, "/api/embed", reqData, &respData); err != nil {
 		return nil, err
 	}
 
-	return nil, nil
+	if len(respData.Embeddings) != 1 {
+		panic(fmt.Sprintf("Unexpected number of embeddings back %d", len(respData.Embeddings)))
+	}
+
+	return respData.Embeddings[0], nil
 }
 
 func (o *ollama) sendRequest(ctx context.Context, method, path string, reqData, respData any) error {

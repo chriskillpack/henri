@@ -104,23 +104,25 @@ out:
 		if err != nil {
 			// Skip missing file errors
 			if _, ok := err.(*fs.PathError); ok {
-				fmt.Println("file error, skipping")
+				fmt.Printf("file error, skipping: %s\n", err)
 				err = db.UpdateImageAttempted(ctx, img.Id, h.Describer.Name(), now)
 				if err != nil {
+					fmt.Printf("error updating image attempt: %s\n", err)
 					errcnt++
 				}
 				continue
 			}
 			return err
 		}
+
 		img.Description, err = h.Describer.DescribeImage(ctx, imgdata)
 		if err != nil {
-			// TODO - set attempted at and move on
-			_ = db.UpdateImageAttempted(ctx, img.Id, h.Describer.Name(), now) // ignore error, already in an error state
+			db.UpdateImageAttempted(ctx, img.Id, h.Describer.Name(), now) // ignore error, already in an error state
 
 			// Allow up to 5 errors before bailing
 			errcnt++
 			if errcnt == 5 {
+				fmt.Println()
 				continue
 			}
 		} else {

@@ -7,3 +7,10 @@ CREATE TABLE images (
     attempted_at TIMESTAMP,
     describer VARCHAR
 );
+
+CREATE TABLE embeddings (
+    id INTEGER NOT NULL PRIMARY KEY,
+    image_id INTEGER NOT NULL,
+    vector BLOB,
+    processed_at TIMESTAMP
+)

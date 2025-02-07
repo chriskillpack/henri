@@ -47,6 +47,19 @@ var schema = &squibble.Schema{
 				`SELECT 1=1`,
 			),
 		},
+
+		{
+			Source: "7c454dd40e25ac4458b7378da3d5087378f378bfb5023abbb24ea1ba2fef17cd",
+			Target: "427f25914892f62a58a8e4bdf5a798be94a6ef360e09079433f5044278cd7e16",
+			Apply: squibble.Exec(
+				`CREATE TABLE embeddings (
+					id INTEGER NOT NULL PRIMARY KEY,
+					image_id INTEGER NOT NULL,
+					vector BLOB,
+					processed_at TIMESTAMP
+				)`,
+			),
+		},
 	},
 }
 
@@ -64,6 +77,15 @@ type Image struct {
 	Description string
 	ProcessedAt sql.NullTime
 	AttemptedAt sql.NullTime
+}
+
+type Embedding struct {
+	Id          int
+	ImageId     int
+	Vector      []float32
+	ProcessedAt time.Time
+
+	Image *Image // can be nil
 }
 
 func (db *DB) Close() {
@@ -221,4 +243,13 @@ func (db *DB) UpdateImageAttempted(ctx context.Context, id int, describer string
 		describer,
 		id)
 	return err
+}
+
+func (db *DB) MissingEmbeddings(ctx context.Context) ([]Embedding, error) {
+	rows, err := db.db.QueryContext(ctx,
+		"SELECT i.* FROM images i LEFT JOIN embeddings e ON i.id=e.image_id WHERE e.id IS NULL")
+	_ = rows
+	_ = err
+
+	return nil, nil
 }

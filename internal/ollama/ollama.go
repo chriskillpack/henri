@@ -45,29 +45,50 @@ func (o *ollama) Name() string { return "ollama" }
 func (o *ollama) DescribeImage(ctx context.Context, image []byte) (string, error) {
 	imb64 := base64.StdEncoding.EncodeToString(image)
 
+	// Request data
 	data := map[string]any{
 		"model":  "llava",
 		"prompt": "please describe this image in detail",
 		"stream": false,
 		"images": []string{imb64},
 	}
-	var (
-		description string
-		err         error
-	)
-	if description, err = o.sendRequest(ctx, http.MethodPost, "/api/generate", data); err != nil {
+
+	// Response data
+	out := struct {
+		Response   string `json:"response"`
+		Done       bool   `json:"done"`
+		DoneReason string `json:"done_reason"`
+	}{}
+
+	if _, err := o.sendRequest(ctx, http.MethodPost, "/api/generate", data, &out); err != nil {
 		return "", err
 	}
 
-	return description, nil
+	if !out.Done || out.DoneReason != "stop" {
+		return "", fmt.Errorf("unexpected done and done_reason: %t, %s", out.Done, out.DoneReason)
+	}
+
+	return strings.TrimLeft(out.Response, " "), nil
 }
 
 func (o *ollama) IsHealthy() bool {
-	_, err := o.sendRequest(context.TODO(), http.MethodHead, "/", nil)
+	_, err := o.sendRequest(context.TODO(), http.MethodHead, "/", nil, nil)
 	return err == nil
 }
 
-func (o *ollama) sendRequest(ctx context.Context, method, path string, reqData any) (string, error) {
+func (o *ollama) Embeddings(description string) ([]float32, error) {
+	data := struct {
+		Model string `json:"model"`
+		Input string `json:"input"`
+	}{
+		Model: "llama",
+		Input: description,
+	}
+	o.sendRequest(context.TODO(), http.MethodPost, "/api/embed", data)
+	return nil, nil
+}
+
+func (o *ollama) sendRequest(ctx context.Context, method, path string, reqData, respData any) (string, error) {
 	var reqBody io.Reader
 
 	switch reqData.(type) {
@@ -102,20 +123,12 @@ func (o *ollama) sendRequest(ctx context.Context, method, path string, reqData a
 		return "", err
 	}
 
-	if len(respBody) > 0 {
-		out := struct {
-			Response   string `json:"response"`
-			Done       bool   `json:"done"`
-			DoneReason string `json:"done_reason"`
-		}{}
-		if err := json.Unmarshal(respBody, &out); err != nil {
+	if len(respBody) > 0 && respData != nil {
+		if err := json.Unmarshal(respBody, respData); err != nil {
 			return "", err
 		}
-		if !out.Done || out.DoneReason != "stop" {
-			return "", fmt.Errorf("unexpected done and done_reason: %t, %s", out.Done, out.DoneReason)
-		}
 
-		return strings.TrimLeft(out.Response, " "), nil
+		return "", nil
 	}
 
 	return "", nil

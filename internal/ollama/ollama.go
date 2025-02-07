@@ -32,11 +32,12 @@ import (
 
 type ollama struct {
 	srvAddr string
+	client  *http.Client
 }
 
 var _ describer.Describer = &ollama{}
 
-func Init(srvAddr string) *ollama {
+func Init(srvAddr string, httpClient *http.Client) *ollama {
 	return &ollama{srvAddr: srvAddr}
 }
 
@@ -45,8 +46,8 @@ func (o *ollama) Name() string { return "ollama" }
 func (o *ollama) DescribeImage(ctx context.Context, image []byte) (string, error) {
 	imb64 := base64.StdEncoding.EncodeToString(image)
 
-	// Request data
-	data := map[string]any{
+	// Request reqData
+	reqData := map[string]any{
 		"model":  "llava",
 		"prompt": "please describe this image in detail",
 		"stream": false,
@@ -54,41 +55,47 @@ func (o *ollama) DescribeImage(ctx context.Context, image []byte) (string, error
 	}
 
 	// Response data
-	out := struct {
+	respData := struct {
 		Response   string `json:"response"`
 		Done       bool   `json:"done"`
 		DoneReason string `json:"done_reason"`
 	}{}
 
-	if _, err := o.sendRequest(ctx, http.MethodPost, "/api/generate", data, &out); err != nil {
+	if err := o.sendRequest(ctx, http.MethodPost, "/api/generate", reqData, &respData); err != nil {
 		return "", err
 	}
 
-	if !out.Done || out.DoneReason != "stop" {
-		return "", fmt.Errorf("unexpected done and done_reason: %t, %s", out.Done, out.DoneReason)
+	if !respData.Done || respData.DoneReason != "stop" {
+		return "", fmt.Errorf("unexpected done and done_reason: %t, %s", respData.Done, respData.DoneReason)
 	}
 
-	return strings.TrimLeft(out.Response, " "), nil
+	return strings.TrimLeft(respData.Response, " "), nil
 }
 
 func (o *ollama) IsHealthy() bool {
-	_, err := o.sendRequest(context.TODO(), http.MethodHead, "/", nil, nil)
-	return err == nil
+	return o.sendRequest(context.TODO(), http.MethodHead, "/", nil, nil) == nil
 }
 
 func (o *ollama) Embeddings(description string) ([]float32, error) {
-	data := struct {
+	reqData := struct {
 		Model string `json:"model"`
 		Input string `json:"input"`
 	}{
 		Model: "llama",
 		Input: description,
 	}
-	o.sendRequest(context.TODO(), http.MethodPost, "/api/embed", data)
+
+	respData := struct {
+	}{}
+
+	if err := o.sendRequest(context.TODO(), http.MethodPost, "/api/embed", reqData, &respData); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
 }
 
-func (o *ollama) sendRequest(ctx context.Context, method, path string, reqData, respData any) (string, error) {
+func (o *ollama) sendRequest(ctx context.Context, method, path string, reqData, respData any) error {
 	var reqBody io.Reader
 
 	switch reqData.(type) {
@@ -97,39 +104,37 @@ func (o *ollama) sendRequest(ctx context.Context, method, path string, reqData, 
 	default:
 		data, err := json.Marshal(reqData)
 		if err != nil {
-			return "", err
+			return err
 		}
 		reqBody = bytes.NewReader(data)
 	}
 
 	reqPath, err := url.JoinPath(o.srvAddr, path)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, reqPath, reqBody)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := o.client.Do(req)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if len(respBody) > 0 && respData != nil {
 		if err := json.Unmarshal(respBody, respData); err != nil {
-			return "", err
+			return err
 		}
-
-		return "", nil
 	}
 
-	return "", nil
+	return nil
 }

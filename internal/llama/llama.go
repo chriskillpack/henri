@@ -54,14 +54,17 @@ var defaultparams = jsonmap{
 type llama struct {
 	srvAddr string
 	seed    int
+
+	client *http.Client
 }
 
 var _ describer.Describer = &llama{}
 
-func Init(srvAddr string, seed int) *llama {
+func Init(srvAddr string, seed int, httpClient *http.Client) *llama {
 	return &llama{
 		srvAddr: srvAddr,
 		seed:    seed,
+		client:  httpClient,
 	}
 }
 
@@ -94,6 +97,10 @@ func (l *llama) DescribeImage(ctx context.Context, image []byte) (string, error)
 	})
 }
 
+func (l *llama) Embeddings(description string) ([]float32, error) {
+	panic("Not implemented for llama")
+}
+
 // Use this with a text prompt
 func queryPrompt(prompt string) string {
 	return promptPreamble + prompt + promptSuffix
@@ -121,7 +128,7 @@ func (l *llama) sendRequest(ctx context.Context, prompt string, stream bool, key
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := l.client.Do(req)
 	if err != nil {
 		return "", err
 	}

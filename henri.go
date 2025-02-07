@@ -40,11 +40,11 @@ func Init(hio InitOptions) (*Henri, error) {
 	}
 
 	if hio.LlamaServer != "" {
-		h.Describer = llama.Init(hio.LlamaServer, hio.LlamaSeed)
+		h.Describer = llama.Init(hio.LlamaServer, hio.LlamaSeed, httpClient)
 		h.serverType = 0
 	}
 	if hio.OllamaServer != "" {
-		h.Describer = ollama.Init(hio.OllamaServer)
+		h.Describer = ollama.Init(hio.OllamaServer, httpClient)
 		h.serverType = 1
 	}
 

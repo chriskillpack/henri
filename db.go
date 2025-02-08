@@ -77,6 +77,9 @@ type Image struct {
 	Description string
 	ProcessedAt sql.NullTime
 	AttemptedAt sql.NullTime
+	Describer   string
+
+	Embedding *Embedding // optional reference
 }
 
 type Embedding struct {
@@ -85,7 +88,7 @@ type Embedding struct {
 	Vector      []float32
 	ProcessedAt time.Time
 
-	Image *Image // can be nil
+	Image *Image // parent image
 }
 
 func (db *DB) Close() {
@@ -245,11 +248,43 @@ func (db *DB) UpdateImageAttempted(ctx context.Context, id int, describer string
 	return err
 }
 
-func (db *DB) MissingEmbeddings(ctx context.Context) ([]Embedding, error) {
-	rows, err := db.db.QueryContext(ctx,
-		"SELECT i.* FROM images i LEFT JOIN embeddings e ON i.id=e.image_id WHERE e.id IS NULL")
-	_ = rows
-	_ = err
+func (db *DB) DescribedImagesMissingEmbeddings(ctx context.Context) ([]*Image, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT i.id, i.image_path, i.image_mtime, i.image_description,
+		       i.processed_at, i.attempted_at, i.describer
+		FROM images i
+		LEFT JOIN embeddings e ON i.id=e.image_id
+		WHERE i.image_description IS NOT NULL AND e.id IS NULL`)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil, nil
+	var images []*Image
+	for rows.Next() {
+		img := &Image{}
+
+		var desc sql.NullString
+		err := rows.Scan(
+			&img.Id,
+			&img.Path,
+			&img.PathMTime,
+			&desc,
+			&img.ProcessedAt,
+			&img.AttemptedAt,
+			&img.Describer,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if desc.Valid {
+			img.Description = desc.String
+		}
+
+		images = append(images, img)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return images, nil
 }

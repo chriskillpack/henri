@@ -127,7 +127,8 @@ out:
 			}
 		} else {
 			end := time.Now()
-			img.ProcessedAt = now
+			img.ProcessedAt.Time = now
+			img.ProcessedAt.Valid = true // TODO - this feels error prone, is there a better way?
 			db.UpdateImage(ctx, img, h.Describer.Name())
 			fmt.Printf("okay, %d secs", int(end.Sub(now).Seconds()))
 		}

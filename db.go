@@ -36,6 +36,17 @@ var schema = &squibble.Schema{
 				`ALTER TABLE images ADD describer VARCHAR`,
 			),
 		},
+
+		// This is an intentional no-op. The DB went through some manual transformation
+		// to get it to match the schema described in db/latest_schema.sql and this entry
+		// is necessary to keep the migration system happy.
+		{
+			Source: "fd6688375b27315dc86feda5caa174bbde47205a0485eb3ff23f34c4e17d573f",
+			Target: "7c454dd40e25ac4458b7378da3d5087378f378bfb5023abbb24ea1ba2fef17cd",
+			Apply: squibble.Exec(
+				`SELECT 1=1`,
+			),
+		},
 	},
 }
 
@@ -51,8 +62,8 @@ type Image struct {
 	Path        string
 	PathMTime   time.Time
 	Description string
-	ProcessedAt time.Time
-	AttemptedAt time.Time
+	ProcessedAt sql.NullTime
+	AttemptedAt sql.NullTime
 }
 
 func (db *DB) Close() {
@@ -63,7 +74,8 @@ func (db *DB) Close() {
 }
 
 func NewDB(ctx context.Context, fname string) (*DB, error) {
-	sqldb, err := sql.Open("sqlite", fname)
+	// Open the DB but flip on the cleaner timestamps from Go
+	sqldb, err := sql.Open("sqlite", fname+"?_time_format=sqlite")
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +120,7 @@ func (db *DB) InsertImagePaths(ctx context.Context, filepaths []string, mtimes [
 			qsb.WriteString(strconv.Itoa(idx*2 + 2))
 			qsb.WriteString("),")
 
-			values = append(values, filepaths[start+idx], mtimes[start+idx].Format(time.DateTime))
+			values = append(values, filepaths[start+idx], mtimes[start+idx])
 		}
 		queryString := qsb.String()
 
@@ -178,16 +190,10 @@ func (db *DB) ImagesToDescribe(ctx context.Context) ([]*Image, error) {
 	for rows.Next() {
 		img := &Image{}
 
-		var mtime, desc sql.NullString
-		err = rows.Scan(&img.Id, &img.Path, &mtime, &desc)
+		var desc sql.NullString
+		err = rows.Scan(&img.Id, &img.Path, &img.PathMTime, &desc)
 		if err != nil {
 			return nil, err
-		}
-		if mtime.Valid {
-			img.PathMTime, err = time.Parse(time.DateTime, mtime.String)
-			if err != nil {
-				return nil, err
-			}
 		}
 		if desc.Valid {
 			img.Description = desc.String
@@ -203,7 +209,7 @@ func (db *DB) UpdateImage(ctx context.Context, img *Image, describer string) err
 		"UPDATE images SET image_description=$1,describer=$2,processed_at=$3 WHERE id=$4",
 		img.Description,
 		describer,
-		img.ProcessedAt.Format(time.DateTime),
+		img.ProcessedAt,
 		img.Id)
 	return err
 }
@@ -211,7 +217,7 @@ func (db *DB) UpdateImage(ctx context.Context, img *Image, describer string) err
 func (db *DB) UpdateImageAttempted(ctx context.Context, id int, describer string, at time.Time) error {
 	_, err := db.db.ExecContext(ctx,
 		"UPDATE images SET attempted_at=$1,describer=$2 WHERE id=$3",
-		at.Format(time.DateTime),
+		at,
 		describer,
 		id)
 	return err

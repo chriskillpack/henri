@@ -2,7 +2,7 @@
 henri.db
 
 # The built binary
-henri
+./henri
 
 # The built sqlite extension shared objects
 sqlite3_extension_fts5.*

@@ -384,3 +384,19 @@ func (db *DB) GetEmbedding(ctx context.Context, id int) (*Embedding, error) {
 	}
 	return embed, nil
 }
+
+// CountEmbeddings returns the number of embeddings in the DB
+func (db *DB) CountEmbeddings(ctx context.Context) (int, error) {
+	row := db.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM embeddings`)
+	if row.Err() != nil {
+		return 0, row.Err()
+	}
+
+	var ne int
+	if err := row.Scan(&ne); err != nil {
+		return 0, err
+	}
+
+	return ne, nil
+}

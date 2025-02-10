@@ -23,6 +23,7 @@ var (
 	llamaSeed      = flag.Int("seed", 385480504, "Random seed to llama")
 	ollamaServer   = flag.String("ollama", "", "Address of running ollama server, typically http://localhost:11434")
 	calcEmbeddings = flag.Bool("embeddings", false, "Specify to compute missing description embeddings")
+	query          = flag.String("query", "", "Search query")
 
 	lameduck bool
 )
@@ -116,9 +117,19 @@ func run(ctx context.Context, h *henri.Henri, dbpath string) error {
 		return nil
 	}
 
-	// Is the server healthy?
+	// All functionality from this point on requires the LLM server. Check if
+	// it is healthy.
 	if !h.Describer.IsHealthy() {
 		return fmt.Errorf("server is not responding")
+	}
+
+	if *query != "" {
+		// Issue query
+		if err := runQuery(*query, h.Describer, db); err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	var (
@@ -191,6 +202,13 @@ func sighandler(ch chan os.Signal, cancel context.CancelFunc) {
 
 func main() {
 	flag.Parse()
+
+	if *calcEmbeddings == true && *query != "" {
+		// Query has to act alone
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	hio := henri.InitOptions{
 		LlamaServer:  *llamaServer,
 		LlamaSeed:    *llamaSeed,

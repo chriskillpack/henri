@@ -76,7 +76,7 @@ func (o *ollama) IsHealthy() bool {
 	return o.sendRequest(context.TODO(), http.MethodHead, "/", nil, nil) == nil
 }
 
-func (o *ollama) Embeddings(description string) ([]float32, error) {
+func (o *ollama) Embeddings(ctx context.Context, description string) ([]float32, error) {
 	reqData := struct {
 		Model string `json:"model"`
 		Input string `json:"input"`
@@ -89,7 +89,7 @@ func (o *ollama) Embeddings(description string) ([]float32, error) {
 		Embeddings [][]float32 `json:"embeddings"`
 	}{}
 
-	if err := o.sendRequest(context.TODO(), http.MethodPost, "/api/embed", reqData, &respData); err != nil {
+	if err := o.sendRequest(ctx, http.MethodPost, "/api/embed", reqData, &respData); err != nil {
 		return nil, err
 	}
 

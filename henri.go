@@ -19,8 +19,6 @@ type InitOptions struct {
 }
 
 type Henri struct {
-	serverType int // 0 = llama, 1 = ollama
-
 	describer.Describer
 }
 
@@ -41,11 +39,9 @@ func Init(hio InitOptions) (*Henri, error) {
 
 	if hio.LlamaServer != "" {
 		h.Describer = llama.Init(hio.LlamaServer, hio.LlamaSeed, httpClient)
-		h.serverType = 0
 	}
 	if hio.OllamaServer != "" {
 		h.Describer = ollama.Init(hio.OllamaServer, httpClient)
-		h.serverType = 1
 	}
 
 	return h, nil

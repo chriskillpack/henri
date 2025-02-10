@@ -14,7 +14,7 @@ type Describer interface {
 	DescribeImage(ctx context.Context, image []byte) (string, error)
 
 	// Embeddings returns the embeddings vector for the given text.
-	Embeddings(description string) ([]float32, error)
+	Embeddings(ctx context.Context, description string) ([]float32, error)
 
 	// IsHealthy returns whether the LLM server is healthy.
 	IsHealthy() bool

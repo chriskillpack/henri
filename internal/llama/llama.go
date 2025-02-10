@@ -97,7 +97,7 @@ func (l *llama) DescribeImage(ctx context.Context, image []byte) (string, error)
 	})
 }
 
-func (l *llama) Embeddings(description string) ([]float32, error) {
+func (l *llama) Embeddings(ctx context.Context, description string) ([]float32, error) {
 	panic("Not implemented for llama")
 }
 

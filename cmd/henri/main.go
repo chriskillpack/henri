@@ -80,7 +80,7 @@ func describeImageFn(ctx context.Context, d describer.Describer, img *henri.Imag
 }
 
 func calcEmbeddingFn(ctx context.Context, d describer.Describer, img *henri.Image, db *henri.DB) error {
-	vector, err := d.Embeddings(img.Description)
+	vector, err := d.Embeddings(ctx, img.Description)
 	if err != nil {
 		return err
 	}

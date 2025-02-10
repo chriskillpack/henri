@@ -6,15 +6,19 @@ A small simple utility that uses a LLaVA multimodal LLM server to classify a lib
 
 ## Usage
 
-Two steps to using. First step, only needs to be done once, walk a photo library looking for JPEGs
+The utility has 3 modes accessible by command line arguments. The first (and initial necessary step) is to scan an image library using the `--library <path_to_library>` command line option. Once scanning is complete the app will terminate.
 
+The two other modes are `--embeddings` and describe (which is implicitly picked if it's not one of the two other modes). The second sends each image to the LLM and asks it to describe the image. The former option computes an embedding vector for each image description.
+
+### Step 1 - scan the image library
 ```
 $ go run ./cmd/henri --library ~/Photos/my_photo_library
 Found 21397 images on disk
 Added 21397 new images
 ```
 
-Before starting the second step, which is the photo description step, you should start the LLaVA server.
+### Step 2 - describe the images
+Before starting the second step, which is the photo description step, you should make sure your LLM server is running. Either a LLaVA file or ollama. How to start the LLaVA server:
 
 ```
 (In another terminal window)
@@ -22,10 +26,10 @@ $ cd llavafile
 $ ./llava-v1.5-7b-q4.llamafile   # Starts a server listening on http://localhost:8080
 ```
 
-Once the server is running proceed with the second step. This will take a while (read days)
+Once the server is running proceed with the second step. The lack of command line option implies image description mode. This will take a while (potentially days).
 
 ```
-$ go run ./cmd/henri
+$ go run ./cmd/henri --ollama http://localhost:11434
 21397 images to process
 Processing 0/21397 <1310: 164E5EBC-F2F5-4B28-A78F-0803857336BE_1_105_c.jpeg> okay, 20 secs
 Processing 1/21397 <1311: 16502306-C779-4C32-9E65-5AED005AD9D1_1_105_c.jpeg> okay, 20 secs
@@ -47,7 +51,18 @@ Processing 16/21397 <1326: 1694A0F2-D116-4A4E-AF3D-BB40179BB0AC_1_102_o.jpeg> ok
 ...
 ```
 
-The utility assumes that the LLaVA server is available at `http://localhost:8080` and has a `POST /completion` endpoint that accepts `JSON` requests. You can use the `--server` option to specify a new server host and port.
+### Step 3 - compute embedding vectors
+
+```
+$ go run ./cmd/henri --embeddings --ollama http://localhost:11434
+17623 images to process
+Using describer ollama
+Processing 0/17623 <416: 06E06DA7-6483-4D91-9ECE-FC99D078C6E0_1_105_c.jpeg> okay, 3 secs
+Processing 1/17623 <417: 06E20A31-84AC-48EE-ADB5-7D2568B66F63_1_105_c.jpeg> okay, 0 secs
+Processing 2/17623 <418: 06E9E693-0ED3-4FE0-AEC1-221708D0CBCF_1_102_o.jpeg> okay, 0 secs
+Processing 3/17623 <419: 06EB7EA8-15EC-4809-A3B6-B7682ED39B4D_1_105_c.jpeg> okay, 0 secs
+....
+```
 
 ## LLM runners
 
@@ -79,13 +94,9 @@ go run ./cmd/henri --llama http://url.to.server:port
 
 ## Database Migrations
 
-Henri will apply pending database migrations at startup. At this time only "up" migrations are supported. Migrations are SQL DDL statements stored in `X_descriptive_name.sql` files in the `db/migrations` folder, where `X` is an integer ordering key with lower numbered migrations applied first. All pending migrations will be applied one after the other, each in a separate DB transaction. Any error will abort any unapplied migrations.
-
-Prior to applying pending migrations a backup of the database file will be created with a timestamped file name. The backup filename is printed to stdout.
-
-If no existing database exists, the processing of the migration files will be skipped and instead `db/latest_schema.sql` will be applied directly. It is important to keep this file up to date with DDL changes in the migrations folder. This fast-forwarding behavior is to reduce DB setup in tests.
+Henri will apply pending database migrations at startup, and only "up" migrations are supported. Migrations are handled by [squibble](https://github.com/tailscale/squibble). The current version of the DB schema is defined in `db/latest_schema.sql`.
 
 ## TODOs
 
-- Switch timestamps in DB to integers? e.g. `approved_ts BIGINT NOT NULL DEFAULT (strftime('%s', 'now'))`
+- Query mode
 - Thumbnail generation?

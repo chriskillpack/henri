@@ -1,9 +1,11 @@
 package henri
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	_ "embed"
+	"encoding/binary"
 	"fmt"
 	"strconv"
 	"strings"
@@ -202,6 +204,8 @@ func (db *DB) InsertImagePathsSingleTxn(ctx context.Context, filepaths []string,
 	return txn.Commit()
 }
 
+// ImagesToDescribe returns Image models for all the images in the DB that lack
+// a description.
 func (db *DB) ImagesToDescribe(ctx context.Context) ([]*Image, error) {
 	rows, err := db.db.QueryContext(
 		ctx,
@@ -229,6 +233,10 @@ func (db *DB) ImagesToDescribe(ctx context.Context) ([]*Image, error) {
 	return images, nil
 }
 
+// UpdateImage updates the associated row in the images table from the Image
+// model Only the description, describer and processed_at columns are updated,
+// hence this function should be called after a successful image description has
+// been generated.
 func (db *DB) UpdateImage(ctx context.Context, img *Image, describer string) error {
 	_, err := db.db.ExecContext(ctx,
 		"UPDATE images SET image_description=$1,describer=$2,processed_at=$3 WHERE id=$4",
@@ -239,6 +247,7 @@ func (db *DB) UpdateImage(ctx context.Context, img *Image, describer string) err
 	return err
 }
 
+// UpdateImageAttempted updates the attempted_at timestamp for an images row.
 func (db *DB) UpdateImageAttempted(ctx context.Context, id int, describer string, at time.Time) error {
 	_, err := db.db.ExecContext(ctx,
 		"UPDATE images SET attempted_at=$1,describer=$2 WHERE id=$3",
@@ -248,6 +257,8 @@ func (db *DB) UpdateImageAttempted(ctx context.Context, id int, describer string
 	return err
 }
 
+// DescribedImagesMissingEmbeddings finds all described images that do not have
+// an associated embedding and returns the images as Image models.
 func (db *DB) DescribedImagesMissingEmbeddings(ctx context.Context) ([]*Image, error) {
 	rows, err := db.db.QueryContext(ctx, `
 		SELECT i.id, i.image_path, i.image_mtime, i.image_description,
@@ -287,4 +298,74 @@ func (db *DB) DescribedImagesMissingEmbeddings(ctx context.Context) ([]*Image, e
 	}
 
 	return images, nil
+}
+
+// CreateEmbedding inserts a new row into the embedding table and returns an
+// Embedding model
+func (db *DB) CreateEmbedding(ctx context.Context, vector []float32, img *Image, at time.Time) (*Embedding, error) {
+	embed := &Embedding{
+		ImageId:     img.Id,
+		Vector:      vector,
+		ProcessedAt: at,
+		Image:       img,
+	}
+	buf := &bytes.Buffer{}
+	buf.Grow(len(vector) * 4)
+	if err := binary.Write(buf, binary.BigEndian, vector); err != nil {
+		return nil, err
+	}
+
+	// Insert the embedding
+	res, err := db.db.ExecContext(ctx, `
+		INSERT INTO embeddings
+		(image_id, vector, processed_at)
+		VALUES (?,?,?)
+		`,
+		img.Id, buf.Bytes(), at,
+	)
+	if err != nil {
+		return nil, err
+	}
+	// Update the model's id
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	embed.Id = int(id)
+
+	// Update the Image's association to this embedding
+	img.Embedding = embed
+	return embed, nil
+}
+
+// GetEmbedding retrieves an Embedding model for the given embedding ID.
+// Currently this does not set up the Image association on the returned
+// Embedding.
+func (db *DB) GetEmbedding(ctx context.Context, id int) (*Embedding, error) {
+	row := db.db.QueryRowContext(ctx, `
+		SELECT id, image_id, vector, processed_at
+		FROM embeddings
+		WHERE id=?`, id)
+	if row.Err() != nil {
+		return nil, row.Err()
+	}
+
+	var blobData []byte
+	embed := &Embedding{}
+	err := row.Scan(
+		&embed.Id,
+		&embed.ImageId,
+		&blobData,
+		&embed.ProcessedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	embed.Vector = make([]float32, len(blobData)/4)
+	err = binary.Read(bytes.NewReader(blobData), binary.BigEndian, &embed.Vector)
+	if err != nil {
+		return nil, err
+	}
+	return embed, nil
 }

@@ -13,14 +13,16 @@ import (
 	"time"
 
 	"github.com/chriskillpack/henri"
+	"github.com/chriskillpack/henri/describer"
 )
 
 var (
-	libraryPath  = flag.String("library", "", "Path to photos library")
-	dbPath       = flag.String("db", "./henri.db", "Path to database")
-	llamaServer  = flag.String("llama", "", "Address of running llama server, typically http://localhost:8080")
-	llamaSeed    = flag.Int("seed", 385480504, "Random seed to llama")
-	ollamaServer = flag.String("ollama", "", "Address of running ollama server, typically http://localhost:11434")
+	libraryPath    = flag.String("library", "", "Path to photos library")
+	dbPath         = flag.String("db", "./henri.db", "Path to database")
+	llamaServer    = flag.String("llama", "", "Address of running llama server, typically http://localhost:8080")
+	llamaSeed      = flag.Int("seed", 385480504, "Random seed to llama")
+	ollamaServer   = flag.String("ollama", "", "Address of running ollama server, typically http://localhost:11434")
+	calcEmbeddings = flag.Bool("embeddings", false, "Specify to compute missing description embeddings")
 
 	lameduck bool
 )
@@ -46,40 +48,99 @@ func findJpegFiles(root string) ([]string, []time.Time, error) {
 	return photos, mtimes, err
 }
 
-func run(ctx context.Context, h *henri.Henri, dbpath string) error {
-	// Is the server healthy?
-	if !h.Describer.IsHealthy() {
-		return fmt.Errorf("server is not responding")
+func describeImageFn(ctx context.Context, d describer.Describer, img *henri.Image, db *henri.DB) error {
+	now := time.Now()
+
+	imgdata, err := os.ReadFile(img.Path)
+	if err != nil {
+		// Skip missing file errors
+		if _, ok := err.(*fs.PathError); ok {
+			fmt.Printf("file error, skipping: %s\n", err)
+			err = db.UpdateImageAttempted(ctx, img.Id, d.Name(), now)
+			if err != nil {
+				fmt.Printf("error updating image attempt: %s\n", err)
+				return err
+			}
+			return nil
+		}
+		return err
 	}
 
+	img.Description, err = d.DescribeImage(ctx, imgdata)
+	if err != nil {
+		db.UpdateImageAttempted(ctx, img.Id, d.Name(), now) // ignore error, already in an error state
+		return err
+	} else {
+		img.ProcessedAt.Time = now
+		img.ProcessedAt.Valid = true // TODO - this feels error prone, is there a better way?
+		db.UpdateImage(ctx, img, d.Name())
+	}
+
+	return nil
+}
+
+func calcEmbeddingFn(ctx context.Context, d describer.Describer, img *henri.Image, db *henri.DB) error {
+	vector, err := d.Embeddings(img.Description)
+	if err != nil {
+		return err
+	}
+	_, err = db.CreateEmbedding(ctx, vector, img, time.Now())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func run(ctx context.Context, h *henri.Henri, dbpath string) error {
 	db, err := henri.NewDB(ctx, dbpath)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	var photos []string
-	var mtimes []time.Time
 	if *libraryPath != "" {
-		photos, mtimes, err = findJpegFiles(*libraryPath)
+		photos, mtimes, err := findJpegFiles(*libraryPath)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("Found %d images on disk\n", len(photos))
+
 		const batchSize = 100
 		added, err := db.InsertImagePaths(ctx, photos, mtimes, batchSize)
 		if err != nil {
 			return err
 		}
+
 		fmt.Printf("Added %d new images\n", added)
 		return nil
 	}
 
-	images, err := db.ImagesToDescribe(ctx)
+	// Is the server healthy?
+	if !h.Describer.IsHealthy() {
+		return fmt.Errorf("server is not responding")
+	}
+
+	var (
+		images []*henri.Image
+		workFn func(context.Context, describer.Describer, *henri.Image, *henri.DB) error
+	)
+
+	if *calcEmbeddings {
+		images, err = db.DescribedImagesMissingEmbeddings(ctx)
+		workFn = calcEmbeddingFn
+	} else {
+		// Assume image describe mode
+		images, err = db.ImagesToDescribe(ctx)
+		workFn = describeImageFn
+	}
+
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
-	fmt.Printf("%d images to process\nClassifying with %s\n", len(images), h.Describer.Name())
+
+	fmt.Printf("%d images to process\nUsing describer %s\n", len(images), h.Describer.Name())
 
 	errcnt := 0
 out:
@@ -94,45 +155,20 @@ out:
 			break out
 		default:
 		}
+
 		img := images[i]
 		_, fname := filepath.Split(img.Path)
 
 		fmt.Printf("Processing %d/%d <%d: %s> ", i, len(images), img.Id, fname)
 		now := time.Now()
 
-		imgdata, err := os.ReadFile(img.Path)
-		if err != nil {
-			// Skip missing file errors
-			if _, ok := err.(*fs.PathError); ok {
-				fmt.Printf("file error, skipping: %s\n", err)
-				err = db.UpdateImageAttempted(ctx, img.Id, h.Describer.Name(), now)
-				if err != nil {
-					fmt.Printf("error updating image attempt: %s\n", err)
-					errcnt++
-				}
-				continue
-			}
-			return err
-		}
-
-		img.Description, err = h.Describer.DescribeImage(ctx, imgdata)
-		if err != nil {
-			db.UpdateImageAttempted(ctx, img.Id, h.Describer.Name(), now) // ignore error, already in an error state
-
-			// Allow up to 5 errors before bailing
+		if err = workFn(ctx, h.Describer, img, db); err != nil {
 			errcnt++
-			if errcnt == 5 {
-				fmt.Println()
-				continue
-			}
-		} else {
-			end := time.Now()
-			img.ProcessedAt.Time = now
-			img.ProcessedAt.Valid = true // TODO - this feels error prone, is there a better way?
-			db.UpdateImage(ctx, img, h.Describer.Name())
-			fmt.Printf("okay, %d secs", int(end.Sub(now).Seconds()))
+			fmt.Println()
+			continue
 		}
-		fmt.Println()
+		end := time.Now()
+		fmt.Printf("okay, %d secs\n", int(end.Sub(now).Seconds()))
 	}
 
 	return nil

@@ -13,4 +13,13 @@ CREATE TABLE embeddings (
     image_id INTEGER NOT NULL,
     vector BLOB,
     processed_at TIMESTAMP
-)
+);
+
+CREATE VIEW embeds AS
+SELECT
+    id,
+    image_id,
+    length(vector) AS lenvec,
+    processed_at
+FROM
+    embeddings;

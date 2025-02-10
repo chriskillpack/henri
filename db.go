@@ -62,6 +62,21 @@ var schema = &squibble.Schema{
 				)`,
 			),
 		},
+
+		{
+			Source: "427f25914892f62a58a8e4bdf5a798be94a6ef360e09079433f5044278cd7e16",
+			Target: "3b6b01fbac91682c5be525d99f0cef37cfc57c1909e69099715c2eea34ccde67",
+			Apply: squibble.Exec(
+				`CREATE VIEW embeds AS
+				SELECT
+					id,
+					image_id,
+					length(vector) AS lenvec,
+					processed_at
+				FROM
+					embeddings;`,
+			),
+		},
 	},
 }
 
@@ -262,7 +277,7 @@ func (db *DB) UpdateImageAttempted(ctx context.Context, id int, describer string
 func (db *DB) DescribedImagesMissingEmbeddings(ctx context.Context) ([]*Image, error) {
 	rows, err := db.db.QueryContext(ctx, `
 		SELECT i.id, i.image_path, i.image_mtime, i.image_description,
-		       i.processed_at, i.attempted_at, i.describer
+			   i.processed_at, i.attempted_at, i.describer
 		FROM images i
 		LEFT JOIN embeddings e ON i.id=e.image_id
 		WHERE i.image_description IS NOT NULL AND e.id IS NULL`)

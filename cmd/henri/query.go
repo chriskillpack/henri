@@ -4,9 +4,11 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/chriskillpack/henri"
 	"github.com/chriskillpack/henri/describer"
+	"github.com/schollz/progressbar/v3"
 )
 
 type embedscore struct {
@@ -39,13 +41,13 @@ type TopKTracker struct {
 }
 
 func NewTopKTracker(k int) *TopKTracker {
-	return &TopKTracker{
+	topk := &TopKTracker{
 		k:    k,
 		heap: make(MinHeap, 0, k),
 	}
+	heap.Init(&topk.heap)
+	return topk
 }
-
-var counter int
 
 func (t *TopKTracker) ProcessItem(index int, score float32) {
 	if len(t.heap) < t.k {
@@ -53,18 +55,22 @@ func (t *TopKTracker) ProcessItem(index int, score float32) {
 		return
 	}
 
-	if counter < 3 {
-		fmt.Printf("scores in heap\n")
-		for _, es := range t.heap {
-			fmt.Printf(" %d %0.5f\n", es.embedId, es.similarity)
-		}
-		counter++
-	}
-
 	if score > t.heap[0].similarity {
 		heap.Pop(&t.heap)
 		heap.Push(&t.heap, embedscore{index, score})
 	}
+}
+
+func (t *TopKTracker) GetTopK() []embedscore {
+	tempHeap := make(MinHeap, len(t.heap))
+	copy(tempHeap, t.heap)
+
+	// Pop items in ascending order
+	result := make([]embedscore, len(tempHeap))
+	for i := len(tempHeap) - 1; i >= 0; i-- {
+		result[i] = heap.Pop(&tempHeap).(embedscore)
+	}
+	return result
 }
 
 // dotp computes the unnormalized dot-product between two vectors. It assumes
@@ -110,10 +116,16 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%d total embeddings\n", ne)
+
+	bar := progressbar.NewOptions(
+		ne,
+		progressbar.OptionSetDescription("Computing similarities"),
+		progressbar.OptionThrottle(100*time.Millisecond),
+		progressbar.OptionShowCount(),
+		progressbar.OptionOnCompletion(func() { fmt.Println() }),
+	)
 
 	top5 := NewTopKTracker(5)
-	heap.Init(&top5.heap)
 
 	// Iterate over the embeddings scoring each one
 	var errcnt int
@@ -121,9 +133,6 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 		if errcnt >= 5 {
 			fmt.Print("Too many errors, terminating")
 			return err
-		}
-		if i == 0 || (i%500) == 0 {
-			fmt.Printf("Scoring %d/%d... ", i, ne)
 		}
 
 		var embed *henri.Embedding
@@ -137,16 +146,17 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 		// embedding.
 		var score float32
 		score, err = computeCosineSimilarity(queryvec, embed.Vector)
-		// fmt.Printf("%d scores %0.5f\n", i, score)
 
 		top5.ProcessItem(i, score)
-	}
-	fmt.Printf("Scoring %d/%d\n", ne, ne)
 
-	// Pop everything out
-	for top5.heap.Len() > 0 {
-		es := top5.heap.Pop().(embedscore)
-		fmt.Printf("Score: %0.5f Embed: %d\n", es.similarity, es.embedId)
+		bar.Add(1)
+	}
+	bar.Finish()
+
+	// Get top results
+	topes := top5.GetTopK()
+	for i, es := range topes {
+		fmt.Printf("Idx %d Score: %0.5f Embed: %d\n", i, es.similarity, es.embedId)
 	}
 
 	return nil

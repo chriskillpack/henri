@@ -77,6 +77,8 @@ func prompt(ctx context.Context, query string) (string, error) {
 
 func (l *llama) Name() string { return "llama" }
 
+func (l *llama) Model() string { return "llava-7b" }
+
 func (l *llama) IsHealthy() bool {
 	resp, err := http.Get(l.srvAddr)
 	if err != nil {

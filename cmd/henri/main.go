@@ -57,7 +57,7 @@ func describeImageFn(ctx context.Context, d describer.Describer, img *henri.Imag
 		// Skip missing file errors
 		if _, ok := err.(*fs.PathError); ok {
 			fmt.Printf("file error, skipping: %s\n", err)
-			err = db.UpdateImageAttempted(ctx, img.Id, d.Name(), now)
+			err = db.UpdateImageAttempted(ctx, img.Id, d.Model(), d.Name(), now)
 			if err != nil {
 				fmt.Printf("error updating image attempt: %s\n", err)
 				return err
@@ -69,12 +69,12 @@ func describeImageFn(ctx context.Context, d describer.Describer, img *henri.Imag
 
 	img.Description, err = d.DescribeImage(ctx, imgdata)
 	if err != nil {
-		db.UpdateImageAttempted(ctx, img.Id, d.Name(), now) // ignore error, already in an error state
+		db.UpdateImageAttempted(ctx, img.Id, d.Model(), d.Name(), now) // ignore error, already in an error state
 		return err
 	} else {
 		img.ProcessedAt.Time = now
 		img.ProcessedAt.Valid = true // TODO - this feels error prone, is there a better way?
-		db.UpdateImage(ctx, img, d.Name())
+		db.UpdateImage(ctx, img, d.Model(), d.Name())
 	}
 
 	return nil
@@ -85,7 +85,7 @@ func calcEmbeddingFn(ctx context.Context, d describer.Describer, img *henri.Imag
 	if err != nil {
 		return err
 	}
-	_, err = db.CreateEmbedding(ctx, vector, img, time.Now())
+	_, err = db.CreateEmbedding(ctx, vector, d.Model(), img, time.Now())
 	if err != nil {
 		return err
 	}

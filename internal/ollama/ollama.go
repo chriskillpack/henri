@@ -33,22 +33,36 @@ import (
 type ollama struct {
 	srvAddr string
 	client  *http.Client
+	model   string
 }
 
-var _ describer.Describer = &ollama{}
+var (
+	_ describer.Describer = &ollama{}
 
-func Init(srvAddr string, httpClient *http.Client) *ollama {
-	return &ollama{srvAddr, httpClient}
+	// Describes models in a consist way that includes parameter count
+	modelMap = map[string]string{
+		"llava": "llava-7b",
+	}
+)
+
+func Init(model string, srvAddr string, httpClient *http.Client) *ollama {
+	if _, ok := modelMap[model]; !ok {
+		panic(fmt.Sprintf("unrecognized model %q", model))
+	}
+
+	return &ollama{srvAddr, httpClient, model}
 }
 
 func (o *ollama) Name() string { return "ollama" }
+
+func (o *ollama) Model() string { return modelMap[o.model] }
 
 func (o *ollama) DescribeImage(ctx context.Context, image []byte) (string, error) {
 	imb64 := base64.StdEncoding.EncodeToString(image)
 
 	// Request reqData
 	reqData := map[string]any{
-		"model":  "llava",
+		"model":  o.model,
 		"prompt": "please describe this image in detail",
 		"stream": false,
 		"images": []string{imb64},
@@ -81,7 +95,7 @@ func (o *ollama) Embeddings(ctx context.Context, description string) ([]float32,
 		Model string `json:"model"`
 		Input string `json:"input"`
 	}{
-		Model: "llava",
+		Model: o.model,
 		Input: description,
 	}
 

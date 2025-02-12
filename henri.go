@@ -41,7 +41,7 @@ func Init(hio InitOptions) (*Henri, error) {
 		h.Describer = llama.Init(hio.LlamaServer, hio.LlamaSeed, httpClient)
 	}
 	if hio.OllamaServer != "" {
-		h.Describer = ollama.Init(hio.OllamaServer, httpClient)
+		h.Describer = ollama.Init("llava", hio.OllamaServer, httpClient)
 	}
 
 	return h, nil

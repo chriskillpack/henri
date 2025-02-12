@@ -7,6 +7,9 @@ type Describer interface {
 	// Name returns the name of the backing LLM, e.g. "llama" or "ollama"
 	Name() string
 
+	// Returns the model identifier, e.g. llava-7b, llama-13b, gpt-4o-mini
+	Model() string
+
 	// DescribeImage returns a string contains an English description of the
 	// provided image. The image data should be the full contents of a JPEG file
 	// including the header. The provided ctx is used as a parent context for

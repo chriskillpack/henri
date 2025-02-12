@@ -400,3 +400,60 @@ func (db *DB) CountEmbeddings(ctx context.Context) (int, error) {
 
 	return ne, nil
 }
+
+// GetEmbeddingsWithImages looks up embeddings by id and returns both the embed
+// (without vector data) and the associated Image.
+func (db *DB) GetEmbeddingsWithImages(ctx context.Context, ids ...int) (map[int]*Embedding, error) {
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT e.id,e.image_id,e.processed_at,
+			   i.id,i.image_path,i.image_mtime,i.image_description,
+			   i.processed_at,i.attempted_at,i.describer
+		FROM embeds e
+		INNER JOIN images i ON e.image_id=i.id
+		WHERE e.id IN (%s)`,
+		strings.Join(placeholders, ","))
+
+	rows, err := db.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	embeddings := make(map[int]*Embedding)
+	for rows.Next() {
+		emb := &Embedding{}
+		img := &Image{}
+
+		err := rows.Scan(
+			&emb.Id,
+			&emb.ImageId,
+			&emb.ProcessedAt,
+			&img.Id,
+			&img.Path,
+			&img.PathMTime,
+			&img.Description,
+			&img.ProcessedAt,
+			&img.AttemptedAt,
+			&img.Describer,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning embeddings and images: %w", err)
+		}
+
+		img.Embedding = emb
+		emb.Image = img
+		embeddings[emb.Id] = emb
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating embeddings and images: %w", err)
+	}
+
+	return embeddings, nil
+}

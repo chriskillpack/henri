@@ -12,14 +12,14 @@ import (
 )
 
 type embedscore struct {
-	embedId    int
-	similarity float32
+	embedId int
+	score   float32
 }
 
 type MinHeap []embedscore
 
 func (h MinHeap) Len() int           { return len(h) }
-func (h MinHeap) Less(i, j int) bool { return h[i].similarity < h[j].similarity }
+func (h MinHeap) Less(i, j int) bool { return h[i].score < h[j].score }
 func (h MinHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
 func (h *MinHeap) Push(x any) {
@@ -35,6 +35,7 @@ func (h *MinHeap) Pop() any {
 	return x
 }
 
+// TopKTracker keeps track on the top K scoring items
 type TopKTracker struct {
 	k    int
 	heap MinHeap
@@ -55,7 +56,7 @@ func (t *TopKTracker) ProcessItem(index int, score float32) {
 		return
 	}
 
-	if score > t.heap[0].similarity {
+	if score > t.heap[0].score {
 		heap.Pop(&t.heap)
 		heap.Push(&t.heap, embedscore{index, score})
 	}
@@ -106,6 +107,7 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 	ctx := context.Background()
 
 	// First things first, convert the query into an embedding queryvec
+	fmt.Printf("Computing query embedding vector...\n")
 	queryvec, err := d.Embeddings(ctx, query)
 	if err != nil {
 		return err
@@ -155,8 +157,23 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 
 	// Get top results
 	topes := top5.GetTopK()
+
+	// Extract the embed ids
+	embedids := make([]int, top5.k)
 	for i, es := range topes {
-		fmt.Printf("Idx %d Score: %0.5f Embed: %d\n", i, es.similarity, es.embedId)
+		embedids[i] = es.embedId
+	}
+
+	embeddings, err := db.GetEmbeddingsWithImages(ctx, embedids...)
+
+	// Iterate over the top 5 again and print out stuff we care about
+	for i, es := range topes {
+		emb := embeddings[es.embedId]
+
+		fmt.Printf("Idx %d    Score=%0.5f\nPath=%q\nDescription=%q\n", i+1, es.score, emb.Image.Path, emb.Image.Description)
+		if i < len(topes)-1 {
+			fmt.Println("==========")
+		}
 	}
 
 	return nil

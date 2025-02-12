@@ -64,6 +64,25 @@ Processing 3/17623 <419: 06EB7EA8-15EC-4809-A3B6-B7682ED39B4D_1_105_c.jpeg> okay
 ....
 ```
 
+## Searching images
+
+```
+$ go run ./cmd/henri --ollama http://localhost:11434 --query "A dog sitting in the sun"
+2025/02/11 22:06:17 Checking schema version...
+2025/02/11 22:06:17 Schema is up-to-date at digest 3b6b01fbac91682c5be525d99f0cef37cfc57c1909e69099715c2eea34ccde67
+Computing query embedding vector...
+Computing similarities 100% |████████████████████████████████████████| (9725/9725)
+Idx 1    Score=0.15057
+Path="/Users/user/Pictures/Photos Library.photoslibrary/resources/derivatives/6/60DEB661-44F3-48CA-8ABC-E6E264CBD4BB_1_105_c.jpeg"
+The image shows a smartphone screen displaying an app, likely related to managing tasks or reminders. There are two buttons visible on the screen: one is labeled \"All My Lists,\" and another says \"Update.\" Additionally, there's a button with the word \"Reminder\" next to it. The phone also has some text at the top of the app that reads \"Search today.\""
+==========
+Idx 2    Score=0.13429
+Path="/Users/user/Pictures/Photos Library.photoslibrary/resources/derivatives/4/42004742-2FA7-408C-AB14-B5E5B097E06E_1_105_c.jpeg"
+Description="The image shows a white paper with an Amazon return label on it. This document is used to ship items back to the seller after purchase, and includes details such as the order number (148639) and the product being returned: Whirlpool WP11870EMR Refrigerator-Freezer Combination Door Shelf Bin. The return label is also accompanied by a note that reads \"Item received in poor condition.\""
+```
+
+First the embedding vector for the query text is computed using the specified LLM. Then all the embedding vectors are searched, scored using cosine similarity, and the top 5 results are shown in decreasing score. Unfortunately the search isn't very good. A couple of TODOs - compute more embedding vectors, explore using a different LLM to compute embedding vectors (OpenAPI / Google Gemini / etc).
+
 ## LLM runners
 
 Henri makes HTTP calls to servers that run LLMs so in theory it can work with any LLM. In practice though each server has different URls or request/response schemas. Currently Henri will work with a llama.cpp webserver such as [llamafile]((https://github.com/Mozilla-Ocho/llamafile) or [ollama](https://ollama.com/) webserver.
@@ -98,5 +117,5 @@ Henri will apply pending database migrations at startup, and only "up" migration
 
 ## TODOs
 
-- Query mode
+- Explore using other models (both local and online) to compute embedding vectors
 - Thumbnail generation?

@@ -22,6 +22,7 @@ var (
 	llamaServer    = flag.String("llama", "", "Address of running llama server, typically http://localhost:8080")
 	llamaSeed      = flag.Int("seed", 385480504, "Random seed to llama")
 	ollamaServer   = flag.String("ollama", "", "Address of running ollama server, typically http://localhost:11434")
+	openAI         = flag.Bool("openai", false, "Use OpenAI")
 	calcEmbeddings = flag.Bool("embeddings", false, "Specify to compute missing description embeddings")
 	query          = flag.String("query", "", "Search query")
 
@@ -94,6 +95,10 @@ func calcEmbeddingFn(ctx context.Context, d describer.Describer, img *henri.Imag
 }
 
 func run(ctx context.Context, h *henri.Henri, dbpath string) error {
+	if h.Name() == "openai" && !*calcEmbeddings && *libraryPath == "" {
+		return fmt.Errorf("for privacy reasons OpenAI cannot be used for describing")
+	}
+
 	db, err := henri.NewDB(ctx, dbpath)
 	if err != nil {
 		return err
@@ -213,6 +218,7 @@ func main() {
 		LlamaServer:  *llamaServer,
 		LlamaSeed:    *llamaSeed,
 		OllamaServer: *ollamaServer,
+		OpenAI:       *openAI,
 	}
 	var (
 		h   *henri.Henri

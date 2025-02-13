@@ -415,9 +415,20 @@ func (db *DB) GetEmbedding(ctx context.Context, id int) (*Embedding, error) {
 }
 
 // CountEmbeddings returns the number of embeddings in the DB
-func (db *DB) CountEmbeddings(ctx context.Context) (int, error) {
-	row := db.db.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM embeddings`)
+func (db *DB) CountEmbeddings(ctx context.Context, models ...string) (int, error) {
+	query := "SELECT COUNT(*) FROM embeddings"
+	args := make([]any, len(models))
+	if len(models) > 0 {
+		placeholders := make([]string, len(models))
+		for i, model := range models {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = model
+		}
+
+		query += fmt.Sprintf(" WHERE model IN (%s)", strings.Join(placeholders, ","))
+	}
+
+	row := db.db.QueryRowContext(ctx, query, args...)
 	if row.Err() != nil {
 		return 0, row.Err()
 	}

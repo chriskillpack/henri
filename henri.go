@@ -7,6 +7,7 @@ import (
 	"github.com/chriskillpack/henri/describer"
 	"github.com/chriskillpack/henri/internal/llama"
 	"github.com/chriskillpack/henri/internal/ollama"
+	"github.com/chriskillpack/henri/internal/openai"
 )
 
 type InitOptions struct {
@@ -14,6 +15,8 @@ type InitOptions struct {
 	LlamaSeed   int
 
 	OllamaServer string
+
+	OpenAI bool
 
 	httpClient *http.Client // if nil uses http.DefaultClient
 }
@@ -25,22 +28,35 @@ type Henri struct {
 func Init(hio InitOptions) (*Henri, error) {
 	h := &Henri{}
 
-	if hio.LlamaServer == "" && hio.OllamaServer == "" {
-		return nil, fmt.Errorf("needs llama or ollama server")
-	}
-	if hio.LlamaServer != "" && hio.OllamaServer != "" {
-		return nil, fmt.Errorf("cannot use both llama and ollama together")
-	}
-
 	httpClient := hio.httpClient
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
 
+	var n int
+	if hio.OpenAI {
+		n++
+	}
 	if hio.LlamaServer != "" {
-		h.Describer = llama.Init(hio.LlamaServer, hio.LlamaSeed, httpClient)
+		n++
 	}
 	if hio.OllamaServer != "" {
+		n++
+	}
+	switch n {
+	case 0:
+		return nil, fmt.Errorf("no backend selected")
+	case 1:
+		// no-op
+	default:
+		return nil, fmt.Errorf("multiple backends selected, only one allowed")
+	}
+
+	if hio.OpenAI {
+		h.Describer = openai.Init(httpClient)
+	} else if hio.LlamaServer != "" {
+		h.Describer = llama.Init(hio.LlamaServer, hio.LlamaSeed, httpClient)
+	} else if hio.OllamaServer != "" {
 		h.Describer = ollama.Init("llava", hio.OllamaServer, httpClient)
 	}
 

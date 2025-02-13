@@ -114,7 +114,7 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 	}
 
 	// Get a list of embeddings
-	ne, err := db.CountEmbeddings(ctx)
+	ne, err := db.CountEmbeddings(ctx, d.Model())
 	if err != nil {
 		return err
 	}

@@ -116,8 +116,7 @@ func (o *openai) sendRequest(ctx context.Context, path string, reqData, respData
 	}
 	reqBody := bytes.NewReader(data)
 
-	bufout := &bytes.Buffer{}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, path, io.TeeReader(reqBody, bufout))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, path, reqBody)
 	if err != nil {
 		return err
 	}

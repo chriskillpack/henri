@@ -143,7 +143,7 @@ func run(ctx context.Context, h *henri.Henri, dbpath string) error {
 	)
 
 	if *calcEmbeddings {
-		images, err = db.DescribedImagesMissingEmbeddings(ctx)
+		images, err = db.DescribedImagesMissingEmbeddings(ctx, h.Describer.Model())
 		workFn = calcEmbeddingFn
 	} else {
 		// Assume image describe mode

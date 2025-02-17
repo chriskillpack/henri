@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/chriskillpack/henri/describer"
 )
@@ -22,16 +23,32 @@ type openai struct {
 var (
 	_ describer.Describer = &openai{}
 
-	openai_key string
+	openai_key string // This will be populated in init()
+
+	rl *rateLimiter // For requests to the OpenAI API
+
+	// This map has dual purposes, first is to define which models are used
+	// and two the size of the embedding vectors we wish
+	modelDimensions = map[string]int{
+		"text-embedding-3-small": 512,
+	}
 )
 
-func Init(httpClient *http.Client) *openai {
+func init() {
 	if openai_key == "" {
 		openai_key = os.Getenv("OPENAI_API_KEY")
 		if openai_key == "" {
 			panic("OPENAI_API_KEY is not set")
 		}
 	}
+}
+
+func Init(httpClient *http.Client) *openai {
+	if _, ok := modelDimensions[model]; !ok {
+		panic("Unrecognized model")
+	}
+
+	rl = newRateLimiter(10, time.Minute)
 
 	return &openai{client: httpClient, model: model}
 }
@@ -57,7 +74,7 @@ func (o *openai) Embeddings(ctx context.Context, description string) ([]float32,
 	}{
 		Input:      description,
 		Model:      o.model,
-		Dimensions: 512, // assumes model is text-embedding-3-small
+		Dimensions: modelDimensions[o.model],
 	}
 
 	type embedding struct {
@@ -76,6 +93,11 @@ func (o *openai) Embeddings(ctx context.Context, description string) ([]float32,
 		Model     string      `json:"model"`
 		Usage     usage       `json:"usage"`
 	}{}
+
+	// Rate limit use of the OpenAI API
+	if err := rl.Acquire(ctx); err != nil {
+		return nil, err
+	}
 
 	if err := o.sendRequest(ctx, "https://api.openai.com/v1/embeddings", reqData, &respData); err != nil {
 		return nil, err
@@ -107,6 +129,10 @@ func (o *openai) sendRequest(ctx context.Context, path string, reqData, respData
 		return err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("bad response %d", resp.StatusCode)
+	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

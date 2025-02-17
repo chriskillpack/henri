@@ -48,7 +48,7 @@ func Init(httpClient *http.Client) *openai {
 		panic("Unrecognized model")
 	}
 
-	rl = newRateLimiter(10, time.Minute)
+	rl = newRateLimiter(20, time.Minute)
 
 	return &openai{client: httpClient, model: model}
 }

@@ -25,6 +25,7 @@ var (
 	openAI         = flag.Bool("openai", false, "Use OpenAI")
 	calcEmbeddings = flag.Bool("embeddings", false, "Specify to compute missing description embeddings")
 	query          = flag.String("query", "", "Search query")
+	count          = flag.Int("count", -1, "Number of items to process")
 
 	lameduck bool
 )
@@ -156,7 +157,10 @@ func run(ctx context.Context, h *henri.Henri, dbpath string) error {
 		return err
 	}
 
-	fmt.Printf("%d images to process\nUsing describer %s\n", len(images), h.Describer.Name())
+	if *count > -1 {
+		images = images[:min(len(images), *count)]
+	}
+	fmt.Printf("%d images to process\nUsing describer %s model %s\n", len(images), h.Describer.Name(), h.Describer.Model())
 
 	errcnt := 0
 out:

@@ -165,6 +165,9 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 	}
 
 	embeddings, err := db.GetEmbeddingsWithImages(ctx, embedids...)
+	if err != nil {
+		return err
+	}
 
 	// Iterate over the top 5 again and print out stuff we care about
 	for i, es := range topes {

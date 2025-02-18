@@ -212,7 +212,7 @@ func sighandler(ch chan os.Signal, cancel context.CancelFunc) {
 func main() {
 	flag.Parse()
 
-	if *calcEmbeddings == true && *query != "" {
+	if *calcEmbeddings && *query != "" {
 		// Query has to act alone
 		flag.Usage()
 		os.Exit(1)

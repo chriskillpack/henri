@@ -1,14 +1,14 @@
 # Henri
 
-Named after Henri Cartier-Bresson [wiki](https://en.wikipedia.org/wiki/Henri_Cartier-Bresson)
+Named after Henri Cartier-Bresson [wiki](https://en.wikipedia.org/wiki/Henri_Cartier-Bresson). ![Henri Cartier-Bresson](images/henri_cartier-bresson.jpeg).
 
-A small simple utility that uses a LLaVA multimodal LLM server to classify a library of photos and stores the descriptions in a SQLite DB. That's it. It's a research project for me, but learn from it if you want.
+An investigation into LLM image search using a multimodal LLM (currently LLaVA) to describe a library of images and then searching those descriptions via embeddings. It's a research project for me, but learn from it if you want.
 
 ## Usage
 
 The utility has 3 modes accessible by command line arguments. The first (and initial necessary step) is to scan an image library using the `--library <path_to_library>` command line option. Once scanning is complete the app will terminate.
 
-The two other modes are `--embeddings` and describe (which is implicitly picked if it's not one of the two other modes). The second sends each image to the LLM and asks it to describe the image. The former option computes an embedding vector for each image description.
+The two other modes are `--embeddings` and describe (which is implicitly picked if it's not one of the two other modes). Describe sends each image to the LLM with a prompt asking it to describe the image. The former option computes an embedding vector for each image description.
 
 ### Step 1 - scan the image library
 ```
@@ -85,7 +85,7 @@ First the embedding vector for the query text is computed using the specified LL
 
 ## LLM runners
 
-Henri makes HTTP calls to servers that run LLMs so in theory it can work with any LLM. In practice though each server has different URls or request/response schemas. Currently Henri will work with a llama.cpp webserver such as [llamafile]((https://github.com/Mozilla-Ocho/llamafile) or [ollama](https://ollama.com/) webserver.
+Henri makes HTTP calls to servers that run LLMs so in theory it can work with any LLM. In practice though each server has different URls or request/response schemas. Currently Henri will work with a llama.cpp webserver such as [llamafile](https://github.com/Mozilla-Ocho/llamafile), [ollama](https://ollama.com/) or the [OpenAI API](https://platform.openai.com/). The OpenAI backend is disabled for image descriptions, due to potential privacy concerns. Sending image descriptions for embedding vector computation and query support is okay though.
 
 ### ollama
 
@@ -110,6 +110,10 @@ Specify the llamafile server
 ```
 go run ./cmd/henri --llama http://url.to.server:port
 ```
+
+### OpenAI API
+
+You will need your own OpenAI API key, put the secret key in the environment variable `OPENAI_API_KEY`. Currently henri rate limits queries to OpenAI API's to 20 requests per minute, and it can only be changed in code. The limit and configuration may change in the future.
 
 ## Database Migrations
 

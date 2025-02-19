@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -223,6 +224,9 @@ func main() {
 		LlamaSeed:    *llamaSeed,
 		OllamaServer: *ollamaServer,
 		OpenAI:       *openAI,
+		HttpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 	var (
 		h   *henri.Henri

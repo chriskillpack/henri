@@ -18,7 +18,7 @@ type InitOptions struct {
 
 	OpenAI bool
 
-	httpClient *http.Client // if nil uses http.DefaultClient
+	HttpClient *http.Client // if nil uses http.DefaultClient
 }
 
 type Henri struct {
@@ -28,7 +28,7 @@ type Henri struct {
 func Init(hio InitOptions) (*Henri, error) {
 	h := &Henri{}
 
-	httpClient := hio.httpClient
+	httpClient := hio.HttpClient
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}

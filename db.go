@@ -210,6 +210,7 @@ func (db *DB) InsertImagePaths(ctx context.Context, filepaths []string, mtimes [
 	return affected, txn.Commit()
 }
 
+// Only used in benchmarks
 func (db *DB) InsertImagePathsSingle(ctx context.Context, filepaths []string, mtimes []time.Time) error {
 	if len(filepaths) != len(mtimes) {
 		return fmt.Errorf("filepaths and mtimes lengths do not match")
@@ -224,6 +225,7 @@ func (db *DB) InsertImagePathsSingle(ctx context.Context, filepaths []string, mt
 	return nil
 }
 
+// Only used in benchmarks
 func (db *DB) InsertImagePathsSingleTxn(ctx context.Context, filepaths []string, mtimes []time.Time) error {
 	if len(filepaths) != len(mtimes) {
 		return fmt.Errorf("filepaths and mtimes lengths do not match")
@@ -247,9 +249,10 @@ func (db *DB) InsertImagePathsSingleTxn(ctx context.Context, filepaths []string,
 // ImagesToDescribe returns Image models for all the images in the DB that lack
 // a description.
 func (db *DB) ImagesToDescribe(ctx context.Context) ([]*Image, error) {
-	rows, err := db.db.QueryContext(
-		ctx,
-		"SELECT id, image_path, image_mtime, image_description FROM images WHERE processed_at IS NULL AND attempted_at IS NULL")
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, image_path, image_mtime, image_description
+		FROM images
+		WHERE processed_at IS NULL AND attempted_at IS NULL`)
 	if err != nil {
 		return nil, err
 	}
@@ -269,17 +272,22 @@ func (db *DB) ImagesToDescribe(ctx context.Context) ([]*Image, error) {
 		}
 		images = append(images, img)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return images, nil
 }
 
 // UpdateImage updates the associated row in the images table from the Image
-// model Only the description, describer and processed_at columns are updated,
+// model. Only the description, describer and processed_at columns are updated,
 // hence this function should be called after a successful image description has
 // been generated.
 func (db *DB) UpdateImage(ctx context.Context, img *Image, model, describer string) error {
-	_, err := db.db.ExecContext(ctx,
-		"UPDATE images SET image_description=$1,model=$2,describer=$3,processed_at=$4 WHERE id=$5",
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE images SET image_description=$1,model=$2,describer=$3,
+				  processed_at=$4
+		WHERE id=$5`,
 		img.Description,
 		model,
 		describer,
@@ -290,8 +298,9 @@ func (db *DB) UpdateImage(ctx context.Context, img *Image, model, describer stri
 
 // UpdateImageAttempted updates the attempted_at timestamp for an images row.
 func (db *DB) UpdateImageAttempted(ctx context.Context, id int, model, describer string, at time.Time) error {
-	_, err := db.db.ExecContext(ctx,
-		"UPDATE images SET attempted_at=$1,model=$2,describer=$3 WHERE id=$4",
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE images SET attempted_at=$1,model=$2,describer=$3
+		WHERE id=$4`,
 		at,
 		model,
 		describer,
@@ -305,7 +314,7 @@ func (db *DB) UpdateImageAttempted(ctx context.Context, id int, model, describer
 func (db *DB) DescribedImagesMissingEmbeddings(ctx context.Context, model string) ([]*Image, error) {
 	query := `
 		SELECT i.id, i.image_path, i.image_mtime, i.image_description,
-			   i.processed_at, i.attempted_at, i.model, i.describer
+		       i.processed_at, i.attempted_at, i.model, i.describer
 		FROM images i
 		LEFT JOIN embeddings e ON i.id=e.image_id AND e.model=$1
 		WHERE i.image_description IS NOT NULL AND e.id IS NULL`
@@ -365,9 +374,8 @@ func (db *DB) CreateEmbedding(ctx context.Context, vector []float32, model strin
 
 	// Insert the embedding
 	res, err := db.db.ExecContext(ctx, `
-		INSERT INTO embeddings
-		(image_id, vector, model, processed_at)
-		VALUES (?,?,?,?)`,
+		INSERT INTO embeddings (image_id, vector, model, processed_at)
+		VALUES ($1,$2,$3,$4)`,
 		img.Id, buf.Bytes(), model, at,
 	)
 	if err != nil {
@@ -392,7 +400,7 @@ func (db *DB) GetEmbedding(ctx context.Context, id int) (*Embedding, error) {
 	row := db.db.QueryRowContext(ctx, `
 		SELECT id, image_id, vector, model, processed_at
 		FROM embeddings
-		WHERE id=?`, id)
+		WHERE id=$1`, id)
 	if row.Err() != nil {
 		return nil, row.Err()
 	}
@@ -421,8 +429,9 @@ func (db *DB) GetEmbedding(ctx context.Context, id int) (*Embedding, error) {
 // EmbeddingIdsForModel returns the the ids of all embeddings that match a model
 func (db *DB) EmbeddingIdsForModel(ctx context.Context, model string) ([]int, error) {
 	rows, err := db.db.QueryContext(ctx, `
-		SELECT id FROM embeddings
-		WHERE model=?`, model)
+		SELECT id
+		FROM embeddings
+		WHERE model=$1`, model)
 	if err != nil {
 		return nil, err
 	}
@@ -455,8 +464,8 @@ func (db *DB) GetEmbeddingsWithImages(ctx context.Context, ids ...int) (map[int]
 
 	query := fmt.Sprintf(`
 		SELECT e.id,e.image_id,e.model,e.processed_at,
-			   i.id,i.image_path,i.image_mtime,i.image_description,
-			   i.processed_at,i.attempted_at,i.model,i.describer
+		       i.id,i.image_path,i.image_mtime,i.image_description,
+		       i.processed_at,i.attempted_at,i.model,i.describer
 		FROM embeds e
 		INNER JOIN images i ON e.image_id=i.id
 		WHERE e.id IN (%s)`,

@@ -1,3 +1,5 @@
+github.com/chriskillpack/ratelimiter v0.0.0-20250220004548-a47391775762 h1:j5+ZDDZ8t2sI/DcVY+Uif/UJEtf4sXVeewfYh/V9Cz4=
+github.com/chriskillpack/ratelimiter v0.0.0-20250220004548-a47391775762/go.mod h1:WYZ3n277rVjJ9sKQLHcoU2Hxadt8Y5ld45BezBIQgiE=
 github.com/creachadair/mds v0.22.3 h1:IXTo8andviQhM8tRqfSirmjGu+HGX1BeVigr0qX4iSQ=
 github.com/creachadair/mds v0.22.3/go.mod h1:ArfS0vPHoLV/SzuIzoqTEZfoYmac7n9Cj8XPANHocvw=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=

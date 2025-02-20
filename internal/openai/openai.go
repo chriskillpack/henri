@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/chriskillpack/henri/describer"
+	"github.com/chriskillpack/ratelimiter"
 
 	oagc "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -22,7 +23,7 @@ type openai struct {
 var (
 	_ describer.Describer = &openai{}
 
-	rl *rateLimiter // For requests to the OpenAI API
+	rl *ratelimiter.Limiter // For requests to the OpenAI API
 
 	// This map has dual purposes, first is to define which models are used
 	// and two the size of the embedding vectors we wish
@@ -36,7 +37,7 @@ func Init(httpClient *http.Client) *openai {
 		panic("Unrecognized model")
 	}
 
-	rl = newRateLimiter(200, time.Minute)
+	rl = ratelimiter.New(200, time.Minute)
 
 	return &openai{
 		oac: oagc.NewClient(

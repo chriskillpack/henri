@@ -1,10 +1,9 @@
 module github.com/chriskillpack/henri
 
-go 1.23
-
-toolchain go1.23.6
+go 1.24.0
 
 require (
+	github.com/chriskillpack/ratelimiter v0.0.0-20250220004548-a47391775762
 	github.com/openai/openai-go v0.1.0-alpha.59
 	github.com/tailscale/squibble v0.0.0-20250108170732-a4ca58afa694
 	modernc.org/sqlite v1.34.5

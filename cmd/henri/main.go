@@ -97,7 +97,9 @@ func calcEmbeddingFn(ctx context.Context, d describer.Describer, img *henri.Imag
 }
 
 func run(ctx context.Context, h *henri.Henri, dbpath string) error {
-	if h.Name() == "openai" && !*calcEmbeddings && *libraryPath == "" {
+	if h.Name() == "openai" &&
+		!*calcEmbeddings &&
+		*libraryPath == "" && *query == "" {
 		return fmt.Errorf("for privacy reasons OpenAI cannot be used for describing")
 	}
 

@@ -50,15 +50,15 @@ func NewTopKTracker(k int) *TopKTracker {
 	return topk
 }
 
-func (t *TopKTracker) ProcessItem(index int, score float32) {
+func (t *TopKTracker) ProcessItem(id int, score float32) {
 	if len(t.heap) < t.k {
-		heap.Push(&t.heap, embedscore{index, score})
+		heap.Push(&t.heap, embedscore{id, score})
 		return
 	}
 
 	if score > t.heap[0].score {
 		heap.Pop(&t.heap)
-		heap.Push(&t.heap, embedscore{index, score})
+		heap.Push(&t.heap, embedscore{id, score})
 	}
 }
 
@@ -113,14 +113,14 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 		return err
 	}
 
-	// Get a list of embeddings
-	ne, err := db.CountEmbeddings(ctx, d.Model())
+	// Get a count of the number of embeddings that match this model
+	eids, err := db.EmbeddingIdsForModel(ctx, d.Model())
 	if err != nil {
 		return err
 	}
 
 	bar := progressbar.NewOptions(
-		ne,
+		len(eids),
 		progressbar.OptionSetDescription("Computing similarities"),
 		progressbar.OptionThrottle(100*time.Millisecond),
 		progressbar.OptionShowCount(),
@@ -131,14 +131,14 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 
 	// Iterate over the embeddings scoring each one
 	var errcnt int
-	for i := range ne {
+	for _, eid := range eids {
 		if errcnt >= 5 {
 			fmt.Print("Too many errors, terminating")
 			return err
 		}
 
 		var embed *henri.Embedding
-		embed, err = db.GetEmbedding(ctx, i)
+		embed, err = db.GetEmbedding(ctx, eid)
 		if err != nil {
 			errcnt++
 			continue
@@ -149,7 +149,7 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 		var score float32
 		score, err = computeCosineSimilarity(queryvec, embed.Vector)
 
-		top5.ProcessItem(i, score)
+		top5.ProcessItem(eid, score)
 
 		bar.Add(1)
 	}

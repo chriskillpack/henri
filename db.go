@@ -314,6 +314,7 @@ func (db *DB) DescribedImagesMissingEmbeddings(ctx context.Context, model string
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var images []*Image
 	for rows.Next() {
@@ -417,31 +418,29 @@ func (db *DB) GetEmbedding(ctx context.Context, id int) (*Embedding, error) {
 	return embed, nil
 }
 
-// CountEmbeddings returns the number of embeddings in the DB
-func (db *DB) CountEmbeddings(ctx context.Context, models ...string) (int, error) {
-	query := "SELECT COUNT(*) FROM embeddings"
-	args := make([]any, len(models))
-	if len(models) > 0 {
-		placeholders := make([]string, len(models))
-		for i, model := range models {
-			placeholders[i] = fmt.Sprintf("$%d", i+1)
-			args[i] = model
+// EmbeddingIdsForModel returns the the ids of all embeddings that match a model
+func (db *DB) EmbeddingIdsForModel(ctx context.Context, model string) ([]int, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id FROM embeddings
+		WHERE model=?`, model)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	eids := make([]int, 0, 1024)
+	for rows.Next() {
+		var eid int
+		if err := rows.Scan(&eid); err != nil {
+			return nil, err
 		}
-
-		query += fmt.Sprintf(" WHERE model IN (%s)", strings.Join(placeholders, ","))
+		eids = append(eids, eid)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
 	}
 
-	row := db.db.QueryRowContext(ctx, query, args...)
-	if row.Err() != nil {
-		return 0, row.Err()
-	}
-
-	var ne int
-	if err := row.Scan(&ne); err != nil {
-		return 0, err
-	}
-
-	return ne, nil
+	return eids, nil
 }
 
 // GetEmbeddingsWithImages looks up embeddings by id and returns both the embed

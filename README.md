@@ -1,18 +1,35 @@
 # Henri
 
-Named after Henri Cartier-Bresson [wiki](https://en.wikipedia.org/wiki/Henri_Cartier-Bresson). ![Henri Cartier-Bresson](images/henri_cartier-bresson.jpeg).
+<a href="https://en.wikipedia.org/wiki/Henri_Cartier-Bresson"><p align="center"><img src="images/henri_cartier-bresson.jpeg" width="120"></p></a>
 
-An investigation into LLM image search using a multimodal LLM (currently LLaVA) to describe a library of images and then searching those descriptions via embeddings. It's a research project for me, but learn from it if you want.
+An investigation into LLM image search using a multimodal LLM (currently LLaVA) to describe a library of images and then searching those descriptions via embeddings. It's a research project for me, but learn from it if you want. Named after [Henri Cartier-Bresson](https://en.wikipedia.org/wiki/Henri_Cartier-Bresson).
 
 ## Usage
 
-The utility has 3 modes accessible by command line arguments. The first (and initial necessary step) is to scan an image library using the `--library <path_to_library>` command line option. Once scanning is complete the app will terminate.
+```
+Usage:
+  henri scan, sc <library_path>    Recursively scan library_path for JPEG files
+  henri describe, d                Generate textual descriptions for images
+  henri embeddings, e              Generate embeddings from image descriptions
+  henri query, q <query>           Search embeddings using the query
+```
 
-The two other modes are `--embeddings` and describe (which is implicitly picked if it's not one of the two other modes). Describe sends each image to the LLM with a prompt asking it to describe the image. The former option computes an embedding vector for each image description.
+In addition there are several command flags (not printed out in the usage yet)
+
+| **Flag**   | **Description**                                                         | **Default/Example**   |
+|------------|-------------------------------------------------------------------------|-----------------------|
+| `db`       | Path to the SQLite database. This will be created if it does not exist. | `--db=henri.db`       |
+| `llama`    | Use the llamafile server running at `http://host:port`.                 | `--llama=""`          |
+| `seed`     | Seed value to send to llamafile server. Legacy, you can ignore this.    | `--seed=385480504`    |
+| `ollama`   | Use the ollama server running at `http://host:port`.                    | `--ollama=""`         |
+| `openai`   | Use OpenAI API. **Not usable for image description**                    | `--openai=false`      |
+| `count`    | Limit the number of work items to N.                                    | `--count=-1`          |
+
+There is a pipeline of steps that need to be followed in order to get the database populated. These are outlined below in order.
 
 ### Step 1 - scan the image library
 ```
-$ go run ./cmd/henri --library ~/Photos/my_photo_library
+$ go run ./cmd/henri scan ~/Photos/my_photo_library
 Found 21397 images on disk
 Added 21397 new images
 ```
@@ -26,10 +43,10 @@ $ cd llavafile
 $ ./llava-v1.5-7b-q4.llamafile   # Starts a server listening on http://localhost:8080
 ```
 
-Once the server is running proceed with the second step. The lack of command line option implies image description mode. This will take a while (potentially days).
+Once your local LLM server is running, start the second step. This is a relatively slow process and may take several days to complete. The longer you leave it running the better, you have more descriptions to search.
 
 ```
-$ go run ./cmd/henri --ollama http://localhost:11434
+$ go run ./cmd/henri describe --ollama http://localhost:11434
 21397 images to process
 Processing 0/21397 <1310: 164E5EBC-F2F5-4B28-A78F-0803857336BE_1_105_c.jpeg> okay, 20 secs
 Processing 1/21397 <1311: 16502306-C779-4C32-9E65-5AED005AD9D1_1_105_c.jpeg> okay, 20 secs
@@ -53,8 +70,10 @@ Processing 16/21397 <1326: 1694A0F2-D116-4A4E-AF3D-BB40179BB0AC_1_102_o.jpeg> ok
 
 ### Step 3 - compute embedding vectors
 
+Once textual descriptions have been created for all the images the final step is to compute embedding vectors for all the images. Without embeddings the search cannot operate. This is a much quicker process than image description. This is a separate step for legacy reasons, but no reason it cannot happen automatically after image description.
+
 ```
-$ go run ./cmd/henri --embeddings --ollama http://localhost:11434
+$ go run ./cmd/henri embeddings --ollama http://localhost:11434
 17623 images to process
 Using describer ollama
 Processing 0/17623 <416: 06E06DA7-6483-4D91-9ECE-FC99D078C6E0_1_105_c.jpeg> okay, 3 secs
@@ -67,7 +86,7 @@ Processing 3/17623 <419: 06EB7EA8-15EC-4809-A3B6-B7682ED39B4D_1_105_c.jpeg> okay
 ## Searching images
 
 ```
-$ go run ./cmd/henri --ollama http://localhost:11434 --query "A dog sitting in the sun"
+$ go run ./cmd/henri query "A dog sitting in the sun" --ollama http://localhost:11434
 2025/02/11 22:06:17 Checking schema version...
 2025/02/11 22:06:17 Schema is up-to-date at digest 3b6b01fbac91682c5be525d99f0cef37cfc57c1909e69099715c2eea34ccde67
 Computing query embedding vector...
@@ -81,7 +100,7 @@ Path="/Users/user/Pictures/Photos Library.photoslibrary/resources/derivatives/4/
 Description="The image shows a white paper with an Amazon return label on it. This document is used to ship items back to the seller after purchase, and includes details such as the order number (148639) and the product being returned: Whirlpool WP11870EMR Refrigerator-Freezer Combination Door Shelf Bin. The return label is also accompanied by a note that reads \"Item received in poor condition.\""
 ```
 
-First the embedding vector for the query text is computed using the specified LLM. Then all the embedding vectors are searched, scored using cosine similarity, and the top 5 results are shown in decreasing score. Unfortunately the search isn't very good. A couple of TODOs - compute more embedding vectors, explore using a different LLM to compute embedding vectors (OpenAPI / Google Gemini / etc).
+First the embedding vector for the query text is computed using the specified LLM. Then all the embedding vectors are searched, scored using cosine similarity, and the top 5 results are shown in decreasing score. The quality of the search results are heavily influenced by the LLM you use. I have seen better search results (from smaller embedding vectors) using OpenAI's text embedding model, than the 7B LLaVA model.
 
 ## LLM runners
 

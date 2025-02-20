@@ -17,16 +17,41 @@ import (
 	"github.com/chriskillpack/henri/describer"
 )
 
+type AppMode int
+
+const (
+	AppModeScan AppMode = iota
+	AppModeDescribe
+	AppModeEmbeddings
+	AppModeQuery
+	AppModeServer
+)
+
+type modeArgInfo struct {
+	mode    AppMode
+	addArgs int // number of additional required & non-flag arguments after the mode parameter
+}
+
 var (
-	libraryPath    = flag.String("library", "", "Path to photos library")
-	dbPath         = flag.String("db", "./henri.db", "Path to database")
-	llamaServer    = flag.String("llama", "", "Address of running llama server, typically http://localhost:8080")
-	llamaSeed      = flag.Int("seed", 385480504, "Random seed to llama")
-	ollamaServer   = flag.String("ollama", "", "Address of running ollama server, typically http://localhost:11434")
-	openAI         = flag.Bool("openai", false, "Use OpenAI (only embedding and search)")
-	calcEmbeddings = flag.Bool("embeddings", false, "Specify to compute missing description embeddings")
-	query          = flag.String("query", "", "Search query")
-	count          = flag.Int("count", -1, "Number of items to process, defaul is no limit")
+	dbPath       = flag.String("db", "./henri.db", "Path to database")
+	llamaServer  = flag.String("llama", "", "Address of running llama server, typically http://localhost:8080")
+	llamaSeed    = flag.Int("seed", 385480504, "Random seed to llama")
+	ollamaServer = flag.String("ollama", "", "Address of running ollama server, typically http://localhost:11434")
+	openAI       = flag.Bool("openai", false, "Use OpenAI (only embedding and search)")
+	count        = flag.Int("count", -1, "Number of items to process, defaul is no limit")
+
+	modeArgs = map[string]modeArgInfo{
+		"scan":       {AppModeScan, 1},
+		"sc":         {AppModeScan, 1},
+		"describe":   {AppModeDescribe, 0},
+		"d":          {AppModeDescribe, 0},
+		"embeddings": {AppModeEmbeddings, 0},
+		"e":          {AppModeEmbeddings, 0},
+		"query":      {AppModeQuery, 1},
+		"q":          {AppModeQuery, 1},
+		"server":     {AppModeServer, 0},
+		"s":          {AppModeServer, 0},
+	}
 
 	lameduck bool
 )
@@ -96,28 +121,25 @@ func calcEmbeddingFn(ctx context.Context, d describer.Describer, img *henri.Imag
 	return nil
 }
 
-func run(ctx context.Context, h *henri.Henri, dbpath string) error {
-	if h.Name() == "openai" &&
-		!*calcEmbeddings &&
-		*libraryPath == "" && *query == "" {
+func run(ctx context.Context, mode AppMode, h *henri.Henri) error {
+	if mode == AppModeDescribe && h.Name() == "openai" {
 		return fmt.Errorf("for privacy reasons OpenAI cannot be used for describing")
 	}
 
-	db, err := henri.NewDB(ctx, dbpath)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
+	defer h.DB.Close()
 
-	if *libraryPath != "" {
-		photos, mtimes, err := findJpegFiles(*libraryPath)
+	if mode == AppModeScan {
+		if len(os.Args) < 2 {
+			return fmt.Errorf("missing library path to scan")
+		}
+		photos, mtimes, err := findJpegFiles(os.Args[2])
 		if err != nil {
 			return err
 		}
 		fmt.Printf("Found %d images on disk\n", len(photos))
 
 		const batchSize = 100
-		added, err := db.InsertImagePaths(ctx, photos, mtimes, batchSize)
+		added, err := h.DB.InsertImagePaths(ctx, photos, mtimes, batchSize)
 		if err != nil {
 			return err
 		}
@@ -132,9 +154,13 @@ func run(ctx context.Context, h *henri.Henri, dbpath string) error {
 		return fmt.Errorf("server is not responding")
 	}
 
-	if *query != "" {
+	if mode == AppModeQuery {
+		if len(os.Args) < 2 {
+			return fmt.Errorf("missing query string")
+		}
+
 		// Issue query
-		if err := runQuery(*query, h.Describer, db); err != nil {
+		if err := runQuery(os.Args[2], h.Describer, h.DB); err != nil {
 			return err
 		}
 
@@ -144,19 +170,18 @@ func run(ctx context.Context, h *henri.Henri, dbpath string) error {
 	var (
 		images []*henri.Image
 		workFn func(context.Context, describer.Describer, *henri.Image, *henri.DB) error
+		err    error
 	)
 
-	if *calcEmbeddings {
-		images, err = db.DescribedImagesMissingEmbeddings(ctx, h.Describer.Model())
-		workFn = calcEmbeddingFn
-	} else {
-		// Assume image describe mode
-		images, err = db.ImagesToDescribe(ctx)
+	switch mode {
+	case AppModeDescribe:
+		images, err = h.DB.ImagesToDescribe(ctx)
 		workFn = describeImageFn
+	case AppModeEmbeddings:
+		images, err = h.DB.DescribedImagesMissingEmbeddings(ctx, h.Describer.Model())
+		workFn = calcEmbeddingFn
 	}
-
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 
@@ -185,7 +210,7 @@ out:
 		fmt.Printf("Processing %d/%d <%d: %s> ", i, len(images), img.Id, fname)
 		now := time.Now()
 
-		if err = workFn(ctx, h.Describer, img, db); err != nil {
+		if err = workFn(ctx, h.Describer, img, h.DB); err != nil {
 			errcnt++
 			fmt.Println()
 			continue
@@ -206,22 +231,45 @@ func sighandler(ch chan os.Signal, cancel context.CancelFunc) {
 			cancel()
 			return
 		} else {
-			fmt.Println("SIGINT received, stopping...")
+			fmt.Println("Stopping...")
 			lameduck = true
 		}
 	}
 }
 
+func printUsageAndExit() {
+	w := flag.CommandLine.Output()
+	fmt.Fprintf(w, "Usage:\n")
+	fmt.Fprintf(w, "  henri scan, sc <library_path>    Recursively scan library_path for JPEG files\n")
+	fmt.Fprintf(w, "  henri describe, d                Generate textual descriptions for images\n")
+	fmt.Fprintf(w, "  henri embeddings, e              Generate embeddings from image descriptions\n")
+	fmt.Fprintf(w, "  henri query, q <query>           Search embeddings using the query\n")
+	os.Exit(0)
+}
+
 func main() {
 	log.SetFlags(0)
 	log.SetPrefix("henri: ")
-	flag.Parse()
 
-	if *calcEmbeddings && *query != "" {
-		// Query has to act alone
+	flag.Usage = printUsageAndExit
+
+	// First argument is the mode and required
+	if len(os.Args) < 2 {
 		flag.Usage()
-		os.Exit(1)
 	}
+
+	modeinfo, ok := modeArgs[strings.ToLower(os.Args[1])]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "unrecognized mode: %s\n", os.Args[1])
+		flag.Usage()
+	}
+
+	// Parse command line args after the mode
+	if err := flag.CommandLine.Parse(os.Args[2+modeinfo.addArgs:]); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("%t\n", *openAI)
 
 	hio := henri.InitOptions{
 		LlamaServer:  *llamaServer,
@@ -231,13 +279,7 @@ func main() {
 		HttpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-	}
-	var (
-		h   *henri.Henri
-		err error
-	)
-	if h, err = henri.Init(hio); err != nil {
-		log.Fatal(err)
+		DbPath: *dbPath,
 	}
 
 	sigch := make(chan os.Signal, 2)
@@ -246,7 +288,12 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	go sighandler(sigch, cancel)
 
-	if err := run(ctx, h, *dbPath); err != nil {
+	h, err := henri.Init(ctx, hio)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := run(ctx, modeinfo.mode, h); err != nil {
 		log.Fatal(err)
 	}
 }

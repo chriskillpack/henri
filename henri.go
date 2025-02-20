@@ -1,6 +1,7 @@
 package henri
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -11,21 +12,21 @@ import (
 )
 
 type InitOptions struct {
-	LlamaServer string
-	LlamaSeed   int
-
-	OllamaServer string
-
-	OpenAI bool
+	LlamaServer  string // Address of Llama server
+	LlamaSeed    int    // Seed to use with LLama (legacy behavior)
+	OllamaServer string // Address of Ollama Server
+	OpenAI       bool   // Should use OpenAI API platform
 
 	HttpClient *http.Client // if nil uses http.DefaultClient
+	DbPath     string       // if present, initialize the database
 }
 
 type Henri struct {
+	DB *DB
 	describer.Describer
 }
 
-func Init(hio InitOptions) (*Henri, error) {
+func Init(ctx context.Context, hio InitOptions) (*Henri, error) {
 	h := &Henri{}
 
 	httpClient := hio.HttpClient
@@ -58,6 +59,14 @@ func Init(hio InitOptions) (*Henri, error) {
 		h.Describer = llama.Init(hio.LlamaServer, hio.LlamaSeed, httpClient)
 	} else if hio.OllamaServer != "" {
 		h.Describer = ollama.Init("llava", hio.OllamaServer, httpClient)
+	}
+
+	if hio.DbPath != "" {
+		var err error
+		h.DB, err = NewDB(ctx, hio.DbPath)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return h, nil

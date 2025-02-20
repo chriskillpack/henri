@@ -36,7 +36,7 @@ func Init(httpClient *http.Client) *openai {
 		panic("Unrecognized model")
 	}
 
-	rl = newRateLimiter(20, time.Minute)
+	rl = newRateLimiter(200, time.Minute)
 
 	return &openai{
 		oac: oagc.NewClient(

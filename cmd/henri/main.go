@@ -23,10 +23,10 @@ var (
 	llamaServer    = flag.String("llama", "", "Address of running llama server, typically http://localhost:8080")
 	llamaSeed      = flag.Int("seed", 385480504, "Random seed to llama")
 	ollamaServer   = flag.String("ollama", "", "Address of running ollama server, typically http://localhost:11434")
-	openAI         = flag.Bool("openai", false, "Use OpenAI")
+	openAI         = flag.Bool("openai", false, "Use OpenAI (only embedding and search)")
 	calcEmbeddings = flag.Bool("embeddings", false, "Specify to compute missing description embeddings")
 	query          = flag.String("query", "", "Search query")
-	count          = flag.Int("count", -1, "Number of items to process")
+	count          = flag.Int("count", -1, "Number of items to process, defaul is no limit")
 
 	lameduck bool
 )
@@ -211,6 +211,8 @@ func sighandler(ch chan os.Signal, cancel context.CancelFunc) {
 }
 
 func main() {
+	log.SetFlags(0)
+	log.SetPrefix("henri: ")
 	flag.Parse()
 
 	if *calcEmbeddings && *query != "" {

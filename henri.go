@@ -2,7 +2,7 @@ package henri
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
 
 	"github.com/chriskillpack/henri/describer"
@@ -17,6 +17,10 @@ type InitOptions struct {
 	OllamaServer string // Address of Ollama Server
 	OpenAI       bool   // Should use OpenAI API platform
 
+	// Setting this to true removes the requirement that at least one backend
+	// is specified. Certain app modes may not require a backend.
+	NoSpecifiedBackendsOK bool
+
 	HttpClient *http.Client // if nil uses http.DefaultClient
 	DbPath     string       // if present, initialize the database
 }
@@ -27,7 +31,16 @@ type Henri struct {
 }
 
 func Init(ctx context.Context, hio InitOptions) (*Henri, error) {
+	if hio.DbPath == "" {
+		return nil, errors.New("no database specified")
+	}
+
 	h := &Henri{}
+
+	var err error
+	if h.DB, err = NewDB(ctx, hio.DbPath); err != nil {
+		return nil, err
+	}
 
 	httpClient := hio.HttpClient
 	if httpClient == nil {
@@ -46,11 +59,13 @@ func Init(ctx context.Context, hio InitOptions) (*Henri, error) {
 	}
 	switch n {
 	case 0:
-		return nil, fmt.Errorf("no backend selected")
+		if !hio.NoSpecifiedBackendsOK {
+			return nil, errors.New("no backend selected")
+		}
 	case 1:
 		// no-op
 	default:
-		return nil, fmt.Errorf("multiple backends selected, only one allowed")
+		return nil, errors.New("multiple backends selected, only one allowed")
 	}
 
 	if hio.OpenAI {
@@ -59,14 +74,6 @@ func Init(ctx context.Context, hio InitOptions) (*Henri, error) {
 		h.Describer = llama.Init(hio.LlamaServer, hio.LlamaSeed, httpClient)
 	} else if hio.OllamaServer != "" {
 		h.Describer = ollama.Init("llava", hio.OllamaServer, httpClient)
-	}
-
-	if hio.DbPath != "" {
-		var err error
-		h.DB, err = NewDB(ctx, hio.DbPath)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	return h, nil

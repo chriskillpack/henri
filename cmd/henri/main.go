@@ -188,7 +188,10 @@ func run(ctx context.Context, mode AppMode, h *henri.Henri) error {
 	if *count > -1 {
 		images = images[:min(len(images), *count)]
 	}
-	fmt.Printf("%d images to process\nUsing describer %s model %s\n", len(images), h.Describer.Name(), h.Describer.Model())
+	fmt.Printf("%d images to process\n", len(images))
+	if len(images) > 0 {
+		fmt.Printf("Using describer %s model %s\n", h.Describer.Name(), h.Describer.Model())
+	}
 
 	errcnt := 0
 out:
@@ -273,19 +276,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%t\n", *openAI)
-
 	hio := henri.InitOptions{
-		LlamaServer:  *llamaServer,
-		LlamaSeed:    *llamaSeed,
-		OllamaServer: *ollamaServer,
-		OpenAI:       *openAI,
+		DbPath:                *dbPath,
+		LlamaServer:           *llamaServer,
+		LlamaSeed:             *llamaSeed,
+		OllamaServer:          *ollamaServer,
+		OpenAI:                *openAI,
+		NoSpecifiedBackendsOK: modeinfo.mode == AppModeScan,
 		HttpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		DbPath: *dbPath,
 	}
-
 	sigch := make(chan os.Signal, 2)
 	signal.Notify(sigch, os.Interrupt)
 

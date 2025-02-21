@@ -14,16 +14,16 @@ Usage:
   henri query, q <query>           Search embeddings using the query
 ```
 
-In addition there are several command flags (not printed out in the usage yet)
+There are command flags which can be used with some of the 
 
-| **Flag**   | **Description**                                                         | **Default/Example**   |
-|------------|-------------------------------------------------------------------------|-----------------------|
-| `db`       | Path to the SQLite database. This will be created if it does not exist. | `--db=henri.db`       |
-| `llama`    | Use the llamafile server running at `http://host:port`.                 | `--llama=""`          |
-| `seed`     | Seed value to send to llamafile server. Legacy, you can ignore this.    | `--seed=385480504`    |
-| `ollama`   | Use the ollama server running at `http://host:port`.                    | `--ollama=""`         |
-| `openai`   | Use OpenAI API. **Not usable for image description**                    | `--openai=false`      |
-| `count`    | Limit the number of work items to N.                                    | `--count=-1`          |
+| **Flag**   | **Description**                                                         | **Default** | **Example**                       |
+|------------|-------------------------------------------------------------------------|-------------|-----------------------------------|
+| `db`       | Path to the SQLite database. This will be created if it does not exist. | `henri.db`  | `--db foo.db`                     |
+| `llama`    | Use the llamafile server running at `http://host:port`.                 | `""`        | `--llama http://localhost:8080`   |
+| `seed`     | Seed value to send to llamafile server. Legacy, you can ignore this.    | `385480504` | `--seed 12345678`                 |
+| `ollama`   | Use the ollama server running at `http://host:port`.                    | `""`        | `--ollama http://localhost:11434` |
+| `openai`   | Use OpenAI API. **Not usable for image description**                    | `false`     | `--openai`                        |
+| `count`    | Limit the number of work items to N.                                    | `-1`        | `--count 100`                     |
 
 There is a pipeline of steps that need to be followed in order to get the database populated. These are outlined below in order.
 

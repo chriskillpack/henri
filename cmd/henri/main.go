@@ -239,11 +239,15 @@ func sighandler(ch chan os.Signal, cancel context.CancelFunc) {
 
 func printUsageAndExit() {
 	w := flag.CommandLine.Output()
-	fmt.Fprintf(w, "Usage:\n")
-	fmt.Fprintf(w, "  henri scan, sc <library_path>    Recursively scan library_path for JPEG files\n")
-	fmt.Fprintf(w, "  henri describe, d                Generate textual descriptions for images\n")
-	fmt.Fprintf(w, "  henri embeddings, e              Generate embeddings from image descriptions\n")
-	fmt.Fprintf(w, "  henri query, q <query>           Search embeddings using the query\n")
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  henri scan, sc <library_path>    Recursively scan library_path for JPEG files")
+	fmt.Fprintln(w, "  henri describe, d                Generate textual descriptions for images")
+	fmt.Fprintln(w, "  henri embeddings, e              Generate embeddings from image descriptions")
+	fmt.Fprintln(w, "  henri query, q <query>           Search embeddings using the query")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Flags:")
+
+	flag.CommandLine.PrintDefaults()
 	os.Exit(0)
 }
 

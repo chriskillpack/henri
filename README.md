@@ -14,7 +14,7 @@ Usage:
   henri query, q <query>           Search embeddings using the query
 ```
 
-There are command flags which can be used with some of the 
+There are command flags which can be used with some of the modes
 
 | **Flag**   | **Description**                                                         | **Default** | **Example**                       |
 |------------|-------------------------------------------------------------------------|-------------|-----------------------------------|

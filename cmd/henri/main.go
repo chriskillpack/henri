@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chriskillpack/henri"
@@ -247,6 +248,7 @@ func printUsageAndExit() {
 	fmt.Fprintln(w, "  henri describe, d                Generate textual descriptions for images")
 	fmt.Fprintln(w, "  henri embeddings, e              Generate embeddings from image descriptions")
 	fmt.Fprintln(w, "  henri query, q <query>           Search embeddings using the query")
+	fmt.Fprintln(w, "  henri server, s                  Start a web server on PORT or 8080")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Flags:")
 
@@ -296,6 +298,36 @@ func main() {
 	h, err := henri.Init(ctx, hio)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if modeinfo.mode == AppModeServer {
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "8080"
+		}
+		srv := NewServer(port)
+
+		go func() {
+			if err := srv.Start(); err != nil {
+				log.Fatalf("Server failed to start - %s", err)
+			}
+		}()
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-ctx.Done()
+
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if err := srv.Shutdown(shutdownCtx); err != nil {
+				log.Printf("Error at server shutdown - %s", err)
+			}
+		}()
+		wg.Wait()
+		os.Exit(0)
 	}
 
 	if err := run(ctx, modeinfo.mode, h); err != nil {

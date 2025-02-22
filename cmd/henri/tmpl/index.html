@@ -18,8 +18,8 @@
             <!-- Search Container -->
             <div class="w-full relative">
                 <!-- Search Input -->
-                <div class="relative mb-8">
-                    <div class="relative flex items-center w-full">
+                <div class="relative">
+                    <div class="relative flex items-center w-full mb-6">
                         <!-- Search Icon -->
                         <button
                             class="absolute left-4 text-gray-400 hover:text-gray-600"
@@ -36,6 +36,15 @@
                             class="w-full py-3 pl-12 pr-4 text-lg border rounded-full shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             placeholder="Photo description..."
                         />
+                    </div>
+                    <!-- Results Container -->
+                    <div id="resultsContainer" class="w-full min-h-[500px] border-t border-gray-200">
+                        <!-- Spinner -->
+                        <div id="spinner" class="flex justify-center hidden">
+                            <div class="animate-spin inline-block size-6 border-[3px] border-current border-t-transparent text-blue-600 rounded-full dark:text-blue-500">
+                                <span class="sr-only">Searching...</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

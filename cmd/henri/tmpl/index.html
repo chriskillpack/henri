@@ -5,6 +5,7 @@
 
         <title>Photo search</title>
         <link rel="stylesheet" href="/static/tailwind.css" />
+        <script src="static/index.js"></script>
     </head>
     <body class="min-h-screen bg-white">
         <div class="max-w-3xl mx-auto pt-24 px-4">
@@ -21,9 +22,7 @@
                 <div class="relative">
                     <div class="relative flex items-center w-full mb-6">
                         <!-- Search Icon -->
-                        <button
-                            class="absolute left-4 text-gray-400 hover:text-gray-600"
-                        >
+                        <button class="absolute left-4 text-gray-400 hover:text-gray-600">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="11" cy="11" r="8"></circle>
                                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -33,18 +32,22 @@
                         <input
                             type="text"
                             id="searchInput"
-                            class="w-full py-3 pl-12 pr-4 text-lg border rounded-full shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            class="w-full py-3 pl-12 pr-4 text-lg border rounded-full shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mr-3"
+                            autofocus
                             placeholder="Photo description..."
                         />
+                        <button id="searchbutton" class="py-4 px-5 inline-flex items-center text-sm font-medium rounded-lg border border-transparent bg-blue-600 text-white disabled:opacity-50" disabled>Search</button>
                     </div>
                     <!-- Results Container -->
-                    <div id="resultsContainer" class="w-full min-h-[500px] border-t border-gray-200">
+                    <div class="w-full min-h-[500px] border-t border-gray-200">
                         <!-- Spinner -->
                         <div id="spinner" class="flex justify-center hidden">
                             <div class="animate-spin inline-block size-6 border-[3px] border-current border-t-transparent text-blue-600 rounded-full dark:text-blue-500">
                                 <span class="sr-only">Searching...</span>
                             </div>
                         </div>
+
+                        <div id="resultsContainer"></div>
                     </div>
                 </div>
             </div>

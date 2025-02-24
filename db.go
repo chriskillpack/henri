@@ -426,6 +426,81 @@ func (db *DB) GetEmbedding(ctx context.Context, id int) (*Embedding, error) {
 	return embed, nil
 }
 
+// EmbeddingBatch holds a results batch for EmbeddingsForModel.
+type EmbeddingBatch struct {
+	Embeds     []*Embedding // len <= EmbeddingsForModel batchSize param
+	LastIDSeen int
+	Done       bool
+}
+
+// EmbeddingsForModel returns Embedding for model. It is a batching API so it
+// returns a channel that will receive batches of Embeddings. The last batch
+// will set Done to true and the channel will be closed. Cancel the supplied
+// context to terminate the batching process.
+func (db *DB) EmbeddingsForModel(ctx context.Context, model string, batchSize int) (<-chan EmbeddingBatch, <-chan error) {
+	if batchSize == 0 {
+		batchSize = 1000
+	}
+
+	batchChan := make(chan EmbeddingBatch)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer close(batchChan)
+		defer close(errChan)
+
+		var lastID int
+		for {
+			if ctx.Err() != nil {
+				errChan <- ctx.Err()
+				return
+			}
+
+			batch, err := db.loadEmbeddingsForBatch(ctx, model, batchSize, lastID)
+			if err != nil {
+				errChan <- fmt.Errorf("loading embedding batch - %w", err)
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
+			case batchChan <- batch:
+			}
+
+			if batch.Done {
+				return
+			}
+		}
+	}()
+
+	return batchChan, errChan
+}
+
+func (db *DB) loadEmbeddingsForBatch(ctx context.Context, model string, batchSize, lastID int) (EmbeddingBatch, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, image_id, vector, model, processed_at
+		FROM embeddings
+		WHERE model=$1 AND id > $2
+		ORDER BY id
+		LIMIT $3`, model, lastID, batchSize)
+	if err != nil {
+		return EmbeddingBatch{}, fmt.Errorf("querying embeddings - %w", err)
+	}
+	defer rows.Close()
+
+	batch := EmbeddingBatch{}
+	batch.Embeds = make([]*Embedding, 0, batchSize)
+	for rows.Next() {
+		emb := &Embedding{Model: model}
+		err := rows.Scan(&emb.Id, &emb.ImageId)
+		_ = err
+	}
+
+	return batch, nil
+}
+
 // EmbeddingIdsForModel returns the the ids of all embeddings that match a model
 func (db *DB) EmbeddingIdsForModel(ctx context.Context, model string) ([]int, error) {
 	rows, err := db.db.QueryContext(ctx, `

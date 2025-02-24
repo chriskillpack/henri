@@ -305,7 +305,7 @@ func main() {
 		if port == "" {
 			port = "8080"
 		}
-		srv := NewServer(port)
+		srv := NewServer(h.Describer, h.DB, port)
 
 		go func() {
 			if err := srv.Start(); err != nil {

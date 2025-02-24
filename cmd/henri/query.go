@@ -1,7 +1,6 @@
 package main
 
 import (
-	"container/heap"
 	"context"
 	"fmt"
 	"time"
@@ -10,69 +9,6 @@ import (
 	"github.com/chriskillpack/henri/describer"
 	"github.com/schollz/progressbar/v3"
 )
-
-type embedscore struct {
-	embedId int
-	score   float32
-}
-
-type MinHeap []embedscore
-
-func (h MinHeap) Len() int           { return len(h) }
-func (h MinHeap) Less(i, j int) bool { return h[i].score < h[j].score }
-func (h MinHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-
-func (h *MinHeap) Push(x any) {
-	*h = append(*h, x.(embedscore))
-}
-
-func (h *MinHeap) Pop() any {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	*h = old[:n-1]
-
-	return x
-}
-
-// TopKTracker keeps track on the top K scoring items
-type TopKTracker struct {
-	k    int
-	heap MinHeap
-}
-
-func NewTopKTracker(k int) *TopKTracker {
-	topk := &TopKTracker{
-		k:    k,
-		heap: make(MinHeap, 0, k),
-	}
-	heap.Init(&topk.heap)
-	return topk
-}
-
-func (t *TopKTracker) ProcessItem(id int, score float32) {
-	if len(t.heap) < t.k {
-		heap.Push(&t.heap, embedscore{id, score})
-		return
-	}
-
-	if score > t.heap[0].score {
-		heap.Pop(&t.heap)
-		heap.Push(&t.heap, embedscore{id, score})
-	}
-}
-
-func (t *TopKTracker) GetTopK() []embedscore {
-	tempHeap := make(MinHeap, len(t.heap))
-	copy(tempHeap, t.heap)
-
-	// Pop items in ascending order
-	result := make([]embedscore, len(tempHeap))
-	for i := len(tempHeap) - 1; i >= 0; i-- {
-		result[i] = heap.Pop(&tempHeap).(embedscore)
-	}
-	return result
-}
 
 // dotp computes the unnormalized dot-product between two vectors. It assumes
 // that a and b are equal length.
@@ -149,7 +85,7 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 		var score float32
 		score, err = computeCosineSimilarity(queryvec, embed.Vector)
 
-		top5.ProcessItem(eid, score)
+		top5.ProcessItem(embed, score)
 
 		bar.Add(1)
 	}
@@ -161,7 +97,7 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 	// Extract the embed ids
 	embedids := make([]int, top5.k)
 	for i, es := range topes {
-		embedids[i] = es.embedId
+		embedids[i] = es.embed.Id
 	}
 
 	embeddings, err := db.GetEmbeddingsWithImages(ctx, embedids...)
@@ -171,7 +107,7 @@ func runQuery(query string, d describer.Describer, db *henri.DB) error {
 
 	// Iterate over the top 5 again and print out stuff we care about
 	for i, es := range topes {
-		emb := embeddings[es.embedId]
+		emb := embeddings[es.embed.Id]
 
 		fmt.Printf("Idx %d    Score=%0.5f\nPath=%q\nDescription=%q\n", i+1, es.score, emb.Image.Path, emb.Image.Description)
 		if i < len(topes)-1 {

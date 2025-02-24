@@ -138,6 +138,23 @@ You will need your own OpenAI API key, put the secret key in the environment var
 
 Henri will apply pending database migrations at startup, and only "up" migrations are supported. Migrations are handled by [squibble](https://github.com/tailscale/squibble). The current version of the DB schema is defined in `db/latest_schema.sql`.
 
+## Development
+
+If you are making changes to the web server pages you will need to build new Tailwind CSS. The easiest way is to use the standalone CLI tool, as this eliminates the need to install Node and a lot of packages. See this [blog post](https://tailwindcss.com/blog/standalone-cli) announcing the tool and this more recent [Github Issue](https://github.com/tailwindlabs/tailwindcss/discussions/15855) which is more of a tutorial that covers updated tool behavior.
+
+Assuming the `tailwindcss` CLI tool is in your path, you can generate new CSS using `go generate`:
+
+```
+[From the project top level folder]
+$ go generate ./cmd/henri
+≈ tailwindcss v4.0.7
+
+Done in 47ms
+$
+```
+
+This will generate new CSS in `cmd/henri/static/tailwind.css` which will need to be committed.
+
 ## TODOs
 
 - Explore using other models (both local and online) to compute embedding vectors

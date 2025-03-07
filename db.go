@@ -472,6 +472,8 @@ func (db *DB) EmbeddingsForModel(ctx context.Context, model string, batchSize in
 			if batch.Done {
 				return
 			}
+
+			lastID = batch.LastIDSeen
 		}
 	}()
 
@@ -480,10 +482,13 @@ func (db *DB) EmbeddingsForModel(ctx context.Context, model string, batchSize in
 
 func (db *DB) loadEmbeddingsForBatch(ctx context.Context, model string, batchSize, lastID int) (EmbeddingBatch, error) {
 	rows, err := db.db.QueryContext(ctx, `
-		SELECT id, image_id, vector, model, processed_at
-		FROM embeddings
-		WHERE model=$1 AND id > $2
-		ORDER BY id
+		SELECT e.id, e.image_id, e.vector, e.processed_at,
+		       i.id, i.image_path, i.image_mtime, i.image_description, i.processed_at, i.attempted_at,
+		       i.describer, i.model
+		FROM embeddings e
+		INNER JOIN images i ON e.image_id=i.id
+		WHERE e.model=$1 AND e.id > $2
+		ORDER BY e.id
 		LIMIT $3`, model, lastID, batchSize)
 	if err != nil {
 		return EmbeddingBatch{}, fmt.Errorf("querying embeddings - %w", err)
@@ -492,12 +497,42 @@ func (db *DB) loadEmbeddingsForBatch(ctx context.Context, model string, batchSiz
 
 	batch := EmbeddingBatch{}
 	batch.Embeds = make([]*Embedding, 0, batchSize)
+	var blobData []byte
 	for rows.Next() {
-		emb := &Embedding{Model: model}
-		err := rows.Scan(&emb.Id, &emb.ImageId)
-		_ = err
+		var img Image
+		emb := &Embedding{Model: model, Image: &img}
+		err := rows.Scan(
+			&emb.Id,
+			&emb.ImageId,
+			&blobData,
+			&emb.ProcessedAt,
+			&img.Id,
+			&img.Path,
+			&img.PathMTime,
+			&img.Description,
+			&img.ProcessedAt,
+			&img.AttemptedAt,
+			&img.Describer,
+			&img.Model,
+		)
+		if err != nil {
+			return EmbeddingBatch{}, fmt.Errorf("scanning rows - %w", err)
+		}
+
+		emb.Vector = make([]float32, len(blobData)/4)
+		err = binary.Read(bytes.NewReader(blobData), binary.BigEndian, &emb.Vector)
+		if err != nil {
+			return EmbeddingBatch{}, fmt.Errorf("reading vector data - %w", err)
+		}
+
+		batch.Embeds = append(batch.Embeds, emb)
+		batch.LastIDSeen = emb.Id
+	}
+	if rows.Err() != nil {
+		return EmbeddingBatch{}, fmt.Errorf("scanning rows - %w", err)
 	}
 
+	batch.Done = len(batch.Embeds) < batchSize
 	return batch, nil
 }
 

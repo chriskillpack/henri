@@ -9,10 +9,10 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"sync"
 
 	"github.com/chriskillpack/henri"
 	"github.com/chriskillpack/henri/describer"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -47,6 +47,26 @@ func NewServer(d describer.Describer, db *henri.DB, port string) *Server {
 		Addr:    net.JoinHostPort("0.0.0.0", port),
 		Handler: srv.serveHandler(),
 	}
+
+	/*
+		// Test that we can retrieve all the Embeddings (with associated Images for a model)
+		batchC, errC := db.EmbeddingsForModel(context.TODO(), d.Model(), 0)
+		ok := true
+		for ok {
+			select {
+			case err := <-errC:
+				fmt.Printf("had an error %q", err)
+				ok = false
+				break
+			case batch := <-batchC:
+				for i, emb := range batch.Embeds[:min(len(batch.Embeds), 10)] {
+					fmt.Printf("%d: %d, %d, %s\n", i, emb.Id, emb.ImageId, emb.Image.Description[0:min(len(emb.Image.Description), 30)])
+				}
+				fmt.Printf("Last seen: %d\n", batch.LastIDSeen)
+				ok = !batch.Done
+			}
+		}
+	*/
 
 	return srv
 }
@@ -96,32 +116,45 @@ func (s *Server) runQuery(ctx context.Context, query string) error {
 	var (
 		queryvec []float32
 		eids     []int
-		cherr    = make(chan error, 2)
-		wg       sync.WaitGroup
 	)
 
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
+	g, _ := errgroup.WithContext(ctx)
+	// Compute the embeddings for this query
+	g.Go(func() error {
 		var err error
 		queryvec, err = s.d.Embeddings(ctx, query)
-		cherr <- err
-	}()
+		return err
+	})
 
-	go func() {
-		defer wg.Done()
+	// Concurrently retrieve the embedding for this model
+	g.Go(func() error {
+		batchCh, errCh := s.db.EmbeddingsForModel(ctx, s.d.Model(), 0)
+
+		for {
+			select {
+			case err := <-errCh:
+				return err
+
+			case batch, ok := <-batchCh:
+				if !ok {
+					// Done
+					break
+				}
+
+				for _, emb := range batch.Embeds {
+					emb = emb
+				}
+			}
+		}
+
 		var err error
 		eids, err = s.db.EmbeddingIdsForModel(ctx, s.d.Model())
-		cherr <- err
-	}()
-	wg.Wait()
-	close(cherr)
-
-	for err := range cherr {
-		if err != nil {
-			return err
-		}
+		return err
+	})
+	if err := g.Wait(); err != nil {
+		return err
 	}
+
 	_ = queryvec
 	_ = eids
 

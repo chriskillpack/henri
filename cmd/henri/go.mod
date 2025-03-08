@@ -5,6 +5,7 @@ go 1.24.0
 require (
 	github.com/chriskillpack/henri v0.0.0-00010101000000-000000000000
 	github.com/schollz/progressbar/v3 v3.18.0
+	golang.org/x/sync v0.12.0
 )
 
 require (

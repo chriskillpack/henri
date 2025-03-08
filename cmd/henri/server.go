@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"html/template"
 	"log"
 	"net"
@@ -48,26 +49,6 @@ func NewServer(d describer.Describer, db *henri.DB, port string) *Server {
 		Handler: srv.serveHandler(),
 	}
 
-	/*
-		// Test that we can retrieve all the Embeddings (with associated Images for a model)
-		batchC, errC := db.EmbeddingsForModel(context.TODO(), d.Model(), 0)
-		ok := true
-		for ok {
-			select {
-			case err := <-errC:
-				fmt.Printf("had an error %q", err)
-				ok = false
-				break
-			case batch := <-batchC:
-				for i, emb := range batch.Embeds[:min(len(batch.Embeds), 10)] {
-					fmt.Printf("%d: %d, %d, %s\n", i, emb.Id, emb.ImageId, emb.Image.Description[0:min(len(emb.Image.Description), 30)])
-				}
-				fmt.Printf("Last seen: %d\n", batch.LastIDSeen)
-				ok = !batch.Done
-			}
-		}
-	*/
-
 	return srv
 }
 
@@ -98,7 +79,9 @@ func (s *Server) serveSearch() http.HandlerFunc {
 
 		query := qvals[0]
 		s.logger.Printf("query - %q\n", query)
-		if err := s.runQuery(req.Context(), query); err != nil {
+		topk, err := s.runQuery(req.Context(), query)
+		_ = topk
+		if err != nil {
 			s.logger.Printf("runQuery error - %s\n", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
@@ -112,13 +95,17 @@ func (s *Server) serveRoot() http.HandlerFunc {
 	}
 }
 
-func (s *Server) runQuery(ctx context.Context, query string) error {
+func (s *Server) runQuery(ctx context.Context, query string) (*TopKTracker, error) {
+	g, _ := errgroup.WithContext(ctx)
+
 	var (
+		batch    henri.EmbeddingBatch
+		batchCh  <-chan henri.EmbeddingBatch
+		errCh    <-chan error
 		queryvec []float32
-		eids     []int
+		ok       bool
 	)
 
-	g, _ := errgroup.WithContext(ctx)
 	// Compute the embeddings for this query
 	g.Go(func() error {
 		var err error
@@ -126,37 +113,63 @@ func (s *Server) runQuery(ctx context.Context, query string) error {
 		return err
 	})
 
-	// Concurrently retrieve the embedding for this model
+	// Concurrently retrieve the first batch of embeddings for this model
 	g.Go(func() error {
-		batchCh, errCh := s.db.EmbeddingsForModel(ctx, s.d.Model(), 0)
+		batchCh, errCh = s.db.EmbeddingsForModel(ctx, s.d.Model(), 0)
 
-		for {
+		select {
+		case err := <-errCh:
+			return err
+
+		case batch, ok = <-batchCh:
+		}
+
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("query error - %w", err)
+	}
+
+	// With the data collected we can start scoring. While the first batch is
+	// being scored, concurrently the next batch will be fetched.
+	topk := NewTopKTracker(5)
+	for ok {
+		// Fetch the next batch concurrently while computing scores for the current batch
+		var nb henri.EmbeddingBatch
+		g.Go(func() error {
 			select {
 			case err := <-errCh:
 				return err
-
-			case batch, ok := <-batchCh:
-				if !ok {
-					// Done
-					break
-				}
-
-				for _, emb := range batch.Embeds {
-					emb = emb
-				}
+			case nb, ok = <-batchCh:
 			}
+			return nil
+		})
+		g.Go(func() error {
+			for _, emb := range batch.Embeds {
+				score, err := computeCosineSimilarity(queryvec, emb.Vector)
+				if err != nil {
+					return err
+				}
+
+				topk.ProcessItem(emb, score)
+			}
+			return nil
+		})
+		err := g.Wait()
+		if err != nil {
+			return nil, fmt.Errorf("scoring batches - %w", err)
 		}
 
-		var err error
-		eids, err = s.db.EmbeddingIdsForModel(ctx, s.d.Model())
-		return err
-	})
-	if err := g.Wait(); err != nil {
-		return err
+		// Intermediate batches will have batch.Done=false,ok=true
+		// Final batch will have batch.Done=true,ok=true
+		// One past the final batch will have batch.Done=false,ok=false,
+		// because the batch channel will have been closed. The closed channel
+		// also returns a zero value batch which has batch.Done=false.
+		// Terminating condition for the loop is ok=false
+
+		// Move the new batch over (TODO - should this all be pointers?)
+		batch = nb
 	}
 
-	_ = queryvec
-	_ = eids
-
-	return nil
+	return topk, nil
 }

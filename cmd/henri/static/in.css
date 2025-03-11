@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+.searchresult {
+    @apply p-4 bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all flex gap-4;
+}
+
+.score {
+    @apply bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded
+}

@@ -1,6 +1,16 @@
-<div>
+<div class="space-y-4">
     {{- range .Results }}
-        <div class="p-4 bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all">
+        <div class="p-4 bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all flex gap-4">
+            <div class="w-24 h-24 bg-gray-200 rounded-lg"></div> <!-- Placeholder for image -->
+            <div class="flex-1">
+                <div class="flex justify-between items-center">
+                    <p class="text-gray-700">{{ .Description }}</p>
+                    <span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded">
+                        {{ printf "%.3f" .Score }}
+                    </span>
+                </div>
+                <p class="text-gray-600 mt-2">Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+            </div>
         </div>
-    {{end}}
+    {{ end }}
 </div>

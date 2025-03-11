@@ -23,7 +23,8 @@ var (
 	//go:embed static
 	staticFS embed.FS
 
-	indexTmpl *template.Template
+	indexTmpl   *template.Template
+	resultsTmpl *template.Template
 )
 
 type Server struct {
@@ -35,6 +36,7 @@ type Server struct {
 
 func init() {
 	indexTmpl = template.Must(template.ParseFS(tmplFS, "tmpl/index.html"))
+	resultsTmpl = template.Must(template.ParseFS(tmplFS, "tmpl/_results.html"))
 }
 
 func NewServer(d describer.Describer, db *henri.DB, port string) *Server {
@@ -79,13 +81,25 @@ func (s *Server) serveSearch() http.HandlerFunc {
 
 		query := qvals[0]
 		s.logger.Printf("query - %q\n", query)
-		topk, err := s.runQuery(req.Context(), query)
-		_ = topk
+		topk, err := s.runQuery(req.Context(), query, 5)
 		if err != nil {
 			s.logger.Printf("runQuery error - %s\n", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
+
+		type searchresult struct {
+			Description string
+			Score       float32
+		}
+		results := struct {
+			Results []searchresult
+		}{Results: make([]searchresult, 5)}
+		for i, es := range topk.GetTopK() {
+			results.Results[i].Description = es.embed.Image.Description
+			results.Results[i].Score = es.score
+		}
+		resultsTmpl.Execute(w, results)
 	}
 }
 
@@ -95,7 +109,7 @@ func (s *Server) serveRoot() http.HandlerFunc {
 	}
 }
 
-func (s *Server) runQuery(ctx context.Context, query string) (*TopKTracker, error) {
+func (s *Server) runQuery(ctx context.Context, query string, k int) (*TopKTracker, error) {
 	g, _ := errgroup.WithContext(ctx)
 
 	var (
@@ -132,7 +146,7 @@ func (s *Server) runQuery(ctx context.Context, query string) (*TopKTracker, erro
 
 	// With the data collected we can start scoring. While the first batch is
 	// being scored, concurrently the next batch will be fetched.
-	topk := NewTopKTracker(5)
+	topk := NewTopKTracker(k)
 	for ok {
 		// Fetch the next batch concurrently while computing scores for the current batch
 		var nb henri.EmbeddingBatch

@@ -1,6 +1,7 @@
 let searchInput;
 let searchButton;
 let spinner;
+let resultsContainer;
 
 addEventListener("load", (event) => {
     const buttons = document.querySelectorAll("div.w-full.relative button")
@@ -26,6 +27,7 @@ addEventListener("load", (event) => {
 
     searchButton = document.querySelector("#searchbutton");
     spinner = document.querySelector("#spinner");
+    resultsContainer = document.querySelector("#resultsContainer");
 });
 
 function handleSearch(event) {
@@ -42,8 +44,8 @@ function handleSearch(event) {
             return response.text();
         })
         .then((html) => {
-            // resultsContainer
-            console.log('success');
+            // Display the results
+            resultsContainer.innerHTML = html;
         })
         .catch((err) => {
             console.error('Error fetching search results: ', err);

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/chriskillpack/henri"
 	"github.com/chriskillpack/henri/describer"
@@ -89,14 +90,14 @@ func (s *Server) serveSearch() http.HandlerFunc {
 		}
 
 		type searchresult struct {
-			Description string
+			Description []string
 			Score       float32
 		}
 		results := struct {
 			Results []searchresult
 		}{Results: make([]searchresult, 5)}
 		for i, es := range topk.GetTopK() {
-			results.Results[i].Description = es.embed.Image.Description
+			results.Results[i].Description = splitByNewline(es.embed.Image.Description)
 			results.Results[i].Score = es.score
 		}
 		resultsTmpl.Execute(w, results)
@@ -186,4 +187,17 @@ func (s *Server) runQuery(ctx context.Context, query string, k int) (*TopKTracke
 	}
 
 	return topk, nil
+}
+
+// Splits s into separate substrings by newline character. Each substring is
+// trimmed for whitespace and the results returned in a slice.
+func splitByNewline(s string) []string {
+	var sections []string
+	for p := range strings.SplitSeq(s, "\n") {
+		if p != "" {
+			sections = append(sections, strings.TrimSpace(p))
+		}
+	}
+
+	return sections
 }

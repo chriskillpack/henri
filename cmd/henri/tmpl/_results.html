@@ -3,13 +3,18 @@
         <div class="searchresult">
             <div class="w-24 h-24 bg-gray-200 rounded-lg"></div> <!-- Placeholder for image -->
             <div class="flex-1">
-                <div class="flex justify-between items-center">
-                    <p class="text-gray-700">{{- .Description -}}</p>
+                {{- range $index, $para := .Description }}
+                    {{ if eq $index 0 }}
+                    <p class="text-gray-700">{{- $para -}}</p>
+                    {{ else }}
+                    <p class="text-gray-600 mt-2">{{- $para -}}</p>
+                    {{ end }}
+                {{end}}
+                <div class="text-right">
                     <span class="score">
                         {{- printf "%.3f" .Score -}}
                     </span>
                 </div>
-                <p class="text-gray-600 mt-2">Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
             </div>
         </div>
     {{ end }}

@@ -7,3 +7,11 @@
 .score {
     @apply bg-orange-100 text-orange-800 text-xs font-semibold px-2 py-1 rounded
 }
+
+.img-landscape {
+    @apply rounded-lg w-72 h-48
+}
+
+.img-portrait {
+    @apply rounded-lg w-48 h-72
+}

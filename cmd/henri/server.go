@@ -93,9 +93,10 @@ func (s *Server) serveSearch() http.HandlerFunc {
 		}
 
 		type searchresult struct {
-			Description []string
-			Score       float32
-			ImageURL    string
+			Description   []string
+			Score         float32
+			ImageURL      string
+			ImageCSSClass string
 		}
 		results := struct {
 			Results []searchresult
@@ -104,6 +105,7 @@ func (s *Server) serveSearch() http.HandlerFunc {
 			results.Results[i].Description = splitByNewline(es.embed.Image.Description)
 			results.Results[i].Score = es.score
 			results.Results[i].ImageURL = fmt.Sprintf("/image/%d", es.embed.ImageId)
+			results.Results[i].ImageCSSClass = "img-landscape"
 		}
 		resultsTmpl.Execute(w, results)
 	}

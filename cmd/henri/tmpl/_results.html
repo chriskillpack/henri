@@ -1,8 +1,7 @@
 <div class="space-y-4">
     {{- range .Results }}
         <div class="searchresult">
-            <!-- w-72 h-48 -->
-            <img class="rounded-lg" src="{{- .ImageURL }}"></img>
+            <img class="{{- .ImageCSSClass }}" src="{{- .ImageURL }}"></img>
             <div class="flex-1">
                 {{- range $index, $para := .Description }}
                     {{ if eq $index 0 }}

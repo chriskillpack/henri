@@ -7,6 +7,8 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
+	"image"
+	_ "image/jpeg"
 	"log"
 	"net"
 	"net/http"
@@ -102,10 +104,20 @@ func (s *Server) serveSearch() http.HandlerFunc {
 			Results []searchresult
 		}{Results: make([]searchresult, 5)}
 		for i, es := range topk.GetTopK() {
+			w, h, err := imageDimensions(es.embed.Image.Path)
+			if err != nil {
+				continue
+			}
+
 			results.Results[i].Description = splitByNewline(es.embed.Image.Description)
 			results.Results[i].Score = es.score
 			results.Results[i].ImageURL = fmt.Sprintf("/image/%d", es.embed.ImageId)
-			results.Results[i].ImageCSSClass = "img-landscape"
+
+			cssClass := "img-landscape"
+			if h > w {
+				cssClass = "img-portrait"
+			}
+			results.Results[i].ImageCSSClass = cssClass
 		}
 		resultsTmpl.Execute(w, results)
 	}
@@ -241,4 +253,23 @@ func splitByNewline(s string) []string {
 	}
 
 	return sections
+}
+
+// Returns the dimensions of the JPEG at imgPath.
+// TODO - this should be stored in the DB as part of injestion.
+func imageDimensions(imgPath string) (w int, h int, err error) {
+	var f *os.File
+
+	f, err = os.Open(imgPath)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	jpg, _, err := image.Decode(f)
+	bounds := jpg.Bounds()
+	w = bounds.Max.X
+	h = bounds.Max.Y
+
+	return
 }

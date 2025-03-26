@@ -10,6 +10,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/chriskillpack/henri"
@@ -67,6 +69,7 @@ func (s *Server) serveHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	mux.Handle("GET /search", s.serveSearch())
+	mux.Handle("GET /image/{id}", s.serveImage())
 	mux.Handle("GET /", s.serveRoot())
 
 	return mux
@@ -92,6 +95,7 @@ func (s *Server) serveSearch() http.HandlerFunc {
 		type searchresult struct {
 			Description []string
 			Score       float32
+			ImageURL    string
 		}
 		results := struct {
 			Results []searchresult
@@ -99,11 +103,46 @@ func (s *Server) serveSearch() http.HandlerFunc {
 		for i, es := range topk.GetTopK() {
 			results.Results[i].Description = splitByNewline(es.embed.Image.Description)
 			results.Results[i].Score = es.score
+			results.Results[i].ImageURL = fmt.Sprintf("/image/%d", es.embed.ImageId)
 		}
 		resultsTmpl.Execute(w, results)
 	}
 }
 
+func (s *Server) serveImage() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		ids := req.PathValue("id")
+		if len(ids) == 0 {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		id, err := strconv.Atoi(ids)
+		if err != nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		img, err := s.db.GetImage(req.Context(), id)
+		if err != nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		// s.logger.Printf("img id %d, path - %s\n", img.Id, img.Path)
+
+		// Load the image off disk and return it
+		data, err := os.ReadFile(img.Path)
+		if err != nil {
+			s.logger.Printf("Failed to read %s\n", img.Path)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", http.DetectContentType(data))
+		w.Write(data)
+	}
+}
 func (s *Server) serveRoot() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		indexTmpl.Execute(w, nil)

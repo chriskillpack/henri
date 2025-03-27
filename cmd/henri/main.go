@@ -248,7 +248,7 @@ func printUsageAndExit() {
 	fmt.Fprintln(w, "  henri describe, d                Generate textual descriptions for images")
 	fmt.Fprintln(w, "  henri embeddings, e              Generate embeddings from image descriptions")
 	fmt.Fprintln(w, "  henri query, q <query>           Search embeddings using the query")
-	fmt.Fprintln(w, "  henri server, s                  Start a web server on PORT or 8080")
+	fmt.Fprintln(w, "  henri server, s                  Start a web server on port 8080, override with PORT env var")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Flags:")
 

@@ -12,6 +12,7 @@ Usage:
   henri describe, d                Generate textual descriptions for images
   henri embeddings, e              Generate embeddings from image descriptions
   henri query, q <query>           Search embeddings using the query
+  henri server, s                  Start webserver (default is port 8080, PORT env var to override)
 ```
 
 There are command flags which can be used with some of the modes
@@ -157,5 +158,4 @@ This will generate new CSS in `cmd/henri/static/tailwind.css` which will need to
 
 ## TODOs
 
-- Explore using other models (both local and online) to compute embedding vectors
 - Thumbnail generation?

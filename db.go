@@ -7,7 +7,6 @@ import (
 	_ "embed"
 	"encoding/binary"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -112,6 +111,7 @@ var schema = &squibble.Schema{
 	},
 }
 
+// DB holds the database connection and provides all methods used by the app.
 type DB struct {
 	mu sync.Mutex
 	db *sql.DB
@@ -119,6 +119,7 @@ type DB struct {
 	filepath string
 }
 
+// Image is an in-memory representation of a row in the images table.
 type Image struct {
 	Id          int
 	Path        string
@@ -132,6 +133,7 @@ type Image struct {
 	Embedding *Embedding // optional reference
 }
 
+// Embedding is an in-memory representation of a row in the embeddings table.
 type Embedding struct {
 	Id          int
 	ImageId     int
@@ -142,6 +144,8 @@ type Embedding struct {
 	Image *Image // parent image
 }
 
+// ImagePath collects together all the info to be inserted into the images table
+// by InsertImagePaths().
 type ImagePath struct {
 	Path          string
 	Modtime       time.Time
@@ -155,6 +159,9 @@ func (db *DB) Close() {
 	db.db.Close()
 }
 
+// NewDB creates a new instance of DB and connects to the specified SQLite
+// database. It configures the connection to use SQLite "time format" for all
+// TIMESTAMP columns.
 func NewDB(ctx context.Context, fname string) (*DB, error) {
 	// Open the DB but flip on the cleaner timestamps from Go
 	sqldb, err := sql.Open("sqlite", fname+"?_time_format=sqlite")
@@ -178,39 +185,11 @@ func (db *DB) InsertImagePaths(ctx context.Context, imagepaths []ImagePath, batc
 	}
 	defer txn.Rollback()
 
-	start := 0
 	totalAffected := 0
-	for start < len(imagepaths) {
-		end := start + batchSize
-		if end > len(imagepaths) {
-			end = len(imagepaths)
-		}
+	for i := 0; i < len(imagepaths); i += batchSize {
+		end := min(i+batchSize, len(imagepaths))
 
-		qsb := strings.Builder{}
-		qsb.WriteString("INSERT OR IGNORE INTO images (image_path, image_mtime, image_width, image_height) VALUES")
-		values := make([]any, 0, batchSize*4)
-		for idx := range imagepaths[start:end] {
-			qsb.WriteString(" ($")
-			qsb.WriteString(strconv.Itoa(idx*4 + 1))
-			qsb.WriteString(",$")
-			qsb.WriteString(strconv.Itoa(idx*4 + 2))
-			qsb.WriteString(",$")
-			qsb.WriteString(strconv.Itoa(idx*4 + 3))
-			qsb.WriteString(",$")
-			qsb.WriteString(strconv.Itoa(idx*4 + 4))
-			qsb.WriteString("),")
-
-			values = append(values,
-				imagepaths[start+idx].Path,
-				imagepaths[start+idx].Modtime,
-				imagepaths[start+idx].Width,
-				imagepaths[start+idx].Height)
-		}
-		queryString := qsb.String()
-
-		// Remove trailing comma
-		queryString = queryString[0 : len(queryString)-1]
-
+		queryString, values := buildInsertImagePathsBatchQuery(imagepaths[i:end])
 		res, err := txn.ExecContext(ctx, queryString, values...)
 		if err != nil {
 			return 0, err
@@ -226,40 +205,26 @@ func (db *DB) InsertImagePaths(ctx context.Context, imagepaths []ImagePath, batc
 	return totalAffected, txn.Commit()
 }
 
-// Only used in benchmarks
-func (db *DB) InsertImagePathsSingle(ctx context.Context, filepaths []string, mtimes []time.Time) error {
-	if len(filepaths) != len(mtimes) {
-		return fmt.Errorf("filepaths and mtimes lengths do not match")
+func buildInsertImagePathsBatchQuery(batch []ImagePath) (string, []any) {
+	var sb strings.Builder
+	sb.WriteString("INSERT OR IGNORE INTO images (image_path, image_mtime, image_width, image_height) VALUES")
+	values := make([]any, 0, len(batch)*4)
+	placeholders := make([]string, len(batch))
+
+	for i, img := range batch {
+		start := i*4 + 1
+		placeholders[i] = fmt.Sprintf("($%d,$%d,$%d,$%d)", start, start+1, start+2, start+3)
+
+		values = append(values,
+			img.Path,
+			img.Modtime,
+			img.Width,
+			img.Height)
 	}
+	sb.WriteString(" ")
+	sb.WriteString(strings.Join(placeholders, ","))
 
-	for i := range filepaths {
-		if _, err := db.db.ExecContext(ctx, "INSERT OR IGNORE INTO images (image_path, image_mtime) VALUES (?,?)", filepaths[i], mtimes[i]); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// Only used in benchmarks
-func (db *DB) InsertImagePathsSingleTxn(ctx context.Context, filepaths []string, mtimes []time.Time) error {
-	if len(filepaths) != len(mtimes) {
-		return fmt.Errorf("filepaths and mtimes lengths do not match")
-	}
-
-	txn, err := db.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer txn.Rollback()
-
-	for i := range filepaths {
-		if _, err := txn.ExecContext(ctx, "INSERT OR IGNORE INTO images (image_path, image_mtime) VALUES (?,?)", filepaths[i], mtimes[i]); err != nil {
-			return err
-		}
-	}
-
-	return txn.Commit()
+	return sb.String(), values
 }
 
 // ImagesToDescribe returns Image models for all the images in the DB that lack

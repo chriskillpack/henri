@@ -1,62 +1,65 @@
 package henri
 
 import (
-	"context"
+	"fmt"
 	"testing"
 	"time"
 )
 
-const count = 40000
-
-func benchmarkInsertImagePaths(b *testing.B, batchSize int) {
-	ctx := context.Background()
-	db, err := NewDB(ctx, ":memory:")
+func TestInsertImagePaths(t *testing.T) {
+	db, err := NewDB(t.Context(), ":memory:")
 	if err != nil {
-		b.Fatal(err)
+		t.Fatal(err)
 	}
-	b.ResetTimer()
+	defer db.Close()
 
-	for n := 0; n < b.N; n++ {
-		filepaths := make([]string, count)
-		mtimes := make([]time.Time, count)
+	t.Run("empty slice", func(t *testing.T) {
+		affected, err := db.InsertImagePaths(t.Context(), []ImagePath{}, 100)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		}
+		if expected, actual := 0, affected; expected != actual {
+			t.Errorf("Expected %d rows affected, got %d", expected, actual)
+		}
+	})
 
-		db.InsertImagePaths(ctx, filepaths, mtimes, batchSize)
-	}
-}
+	t.Run("single batch", func(t *testing.T) {
+		imgs := []ImagePath{
+			{Path: "/path/to/1", Modtime: time.Now(), Width: 640, Height: 480},
+			{Path: "/path/to/2", Modtime: time.Now(), Width: 800, Height: 600},
+			{Path: "/path/to/3", Modtime: time.Now(), Width: 1024, Height: 768},
+		}
+		affected, err := db.InsertImagePaths(t.Context(), imgs, 100)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		}
+		if expected, actual := 3, affected; expected != actual {
+			t.Errorf("Expected %d rows affected, got %d", expected, actual)
+		}
+	})
 
-func BenchmarkInsertImagePaths50(b *testing.B)   { benchmarkInsertImagePaths(b, 50) }
-func BenchmarkInsertImagePaths100(b *testing.B)  { benchmarkInsertImagePaths(b, 100) }
-func BenchmarkInsertImagePaths500(b *testing.B)  { benchmarkInsertImagePaths(b, 500) }
-func BenchmarkInsertImagePaths1000(b *testing.B) { benchmarkInsertImagePaths(b, 1000) }
+	t.Run("multiple batches", func(t *testing.T) {
+		_, err := db.db.ExecContext(t.Context(), "DELETE FROM images")
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		}
 
-func BenchmarkInsertImagePathSingle(b *testing.B) {
-	ctx := context.Background()
-	db, err := NewDB(ctx, ":memory:")
-	if err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
+		paths := make([]ImagePath, 25)
+		for i := range paths {
+			paths[i] = ImagePath{
+				Path:    fmt.Sprintf("/path/to/%d.jpg", i+1),
+				Modtime: time.Now(),
+				Width:   1024 + i,
+				Height:  768 + i,
+			}
+		}
 
-	for n := 0; n < b.N; n++ {
-		filepaths := make([]string, count)
-		mtimes := make([]time.Time, count)
-
-		db.InsertImagePathsSingle(ctx, filepaths, mtimes)
-	}
-}
-
-func BenchmarkInsertImagePathSingleTxn(b *testing.B) {
-	ctx := context.Background()
-	db, err := NewDB(ctx, ":memory:")
-	if err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-
-	for n := 0; n < b.N; n++ {
-		filepaths := make([]string, count)
-		mtimes := make([]time.Time, count)
-
-		db.InsertImagePathsSingleTxn(ctx, filepaths, mtimes)
-	}
+		affected, err := db.InsertImagePaths(t.Context(), paths, 10)
+		if err != nil {
+			t.Errorf("Unexpected error %s", err)
+		}
+		if expected, actual := 25, affected; expected != actual {
+			t.Errorf("Expected %d modified rows, got %d", expected, actual)
+		}
+	})
 }

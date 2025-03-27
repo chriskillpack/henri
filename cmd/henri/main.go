@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"image"
 	"io/fs"
 	"log"
 	"net/http"
@@ -57,9 +58,9 @@ var (
 	lameduck bool
 )
 
-func findJpegFiles(root string) ([]string, []time.Time, error) {
-	var photos []string
-	var mtimes []time.Time
+// Walk the filesystem from root finding all JPEG files. The results include the JPEG image dimensions.
+func findJpegFiles(root string) ([]henri.ImagePath, error) {
+	var results []henri.ImagePath
 
 	err := filepath.Walk(root, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
@@ -68,14 +69,46 @@ func findJpegFiles(root string) ([]string, []time.Time, error) {
 
 		ext := strings.ToLower(filepath.Ext(path))
 		if ext == ".jpg" || ext == ".jpeg" {
-			photos = append(photos, path)
-			mtimes = append(mtimes, info.ModTime())
+			result := henri.ImagePath{
+				Path:    path,
+				Modtime: info.ModTime(),
+			}
+
+			// Retrieve the JPEG image dimensions
+			var (
+				w, h int
+			)
+			w, h, err = imageDimensions(path)
+			if err != nil {
+				return err
+			}
+			result.Width = w
+			result.Height = h
+
+			results = append(results, result)
 		}
 
 		return nil
 	})
 
-	return photos, mtimes, err
+	return results, err
+}
+
+func imageDimensions(imgPath string) (w int, h int, err error) {
+	var f *os.File
+
+	f, err = os.Open(imgPath)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	jpg, _, err := image.Decode(f)
+	bounds := jpg.Bounds()
+	w = bounds.Max.X
+	h = bounds.Max.Y
+
+	return
 }
 
 func describeImageFn(ctx context.Context, d describer.Describer, img *henri.Image, db *henri.DB) error {
@@ -133,14 +166,14 @@ func run(ctx context.Context, mode AppMode, h *henri.Henri) error {
 		if len(os.Args) < 2 {
 			return fmt.Errorf("missing library path to scan")
 		}
-		photos, mtimes, err := findJpegFiles(os.Args[2])
+		imagepaths, err := findJpegFiles(os.Args[2])
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Found %d images on disk\n", len(photos))
+		fmt.Printf("Found %d images on disk\n", len(imagepaths))
 
 		const batchSize = 100
-		added, err := h.DB.InsertImagePaths(ctx, photos, mtimes, batchSize)
+		added, err := h.DB.InsertImagePaths(ctx, imagepaths, batchSize)
 		if err != nil {
 			return err
 		}

@@ -100,6 +100,15 @@ var schema = &squibble.Schema{
 					embeddings;`,
 			),
 		},
+
+		{
+			Source: "1ac7bf721d8b6c1c9b85ce19aebef975cb833ba79d9c0619c5e0a159d68c7106",
+			Target: "201fecb0f6becf7a2afb22abb0b470b514de6b820ea7a4920812172a67f1e0e9",
+			Apply: squibble.Exec(
+				`ALTER TABLE images ADD COLUMN image_width INTEGER;`,
+				`ALTER TABLE images ADD COLUMN image_height INTEGER;`,
+			),
+		},
 	},
 }
 
@@ -133,6 +142,12 @@ type Embedding struct {
 	Image *Image // parent image
 }
 
+type ImagePath struct {
+	Path          string
+	Modtime       time.Time
+	Width, Height int
+}
+
 func (db *DB) Close() {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -156,13 +171,7 @@ func NewDB(ctx context.Context, fname string) (*DB, error) {
 	return &DB{db: sqldb, filepath: fname}, nil
 }
 
-func (db *DB) InsertImagePaths(ctx context.Context, filepaths []string, mtimes []time.Time, batchSize int) (int, error) {
-	// const batchSize = 100
-
-	if len(filepaths) != len(mtimes) {
-		return 0, fmt.Errorf("filepaths and mtimes lengths do not match")
-	}
-
+func (db *DB) InsertImagePaths(ctx context.Context, imagepaths []ImagePath, batchSize int) (int, error) {
 	txn, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -170,24 +179,32 @@ func (db *DB) InsertImagePaths(ctx context.Context, filepaths []string, mtimes [
 	defer txn.Rollback()
 
 	start := 0
-	affected := 0
-	for start < len(filepaths) {
+	totalAffected := 0
+	for start < len(imagepaths) {
 		end := start + batchSize
-		if end > len(filepaths) {
-			end = len(filepaths)
+		if end > len(imagepaths) {
+			end = len(imagepaths)
 		}
 
 		qsb := strings.Builder{}
-		qsb.WriteString("INSERT OR IGNORE INTO images (image_path, image_mtime) VALUES")
-		values := make([]any, 0, batchSize*2)
-		for idx := range filepaths[start:end] {
+		qsb.WriteString("INSERT OR IGNORE INTO images (image_path, image_mtime, image_width, image_height) VALUES")
+		values := make([]any, 0, batchSize*4)
+		for idx := range imagepaths[start:end] {
 			qsb.WriteString(" ($")
-			qsb.WriteString(strconv.Itoa(idx*2 + 1))
+			qsb.WriteString(strconv.Itoa(idx*4 + 1))
 			qsb.WriteString(",$")
-			qsb.WriteString(strconv.Itoa(idx*2 + 2))
+			qsb.WriteString(strconv.Itoa(idx*4 + 2))
+			qsb.WriteString(",$")
+			qsb.WriteString(strconv.Itoa(idx*4 + 3))
+			qsb.WriteString(",$")
+			qsb.WriteString(strconv.Itoa(idx*4 + 4))
 			qsb.WriteString("),")
 
-			values = append(values, filepaths[start+idx], mtimes[start+idx])
+			values = append(values,
+				imagepaths[start+idx].Path,
+				imagepaths[start+idx].Modtime,
+				imagepaths[start+idx].Width,
+				imagepaths[start+idx].Height)
 		}
 		queryString := qsb.String()
 
@@ -199,15 +216,14 @@ func (db *DB) InsertImagePaths(ctx context.Context, filepaths []string, mtimes [
 			return 0, err
 		}
 
-		ra, err := res.RowsAffected()
+		affected, err := res.RowsAffected()
 		if err != nil {
 			return 0, err
 		}
-		affected += int(ra)
-		start = end
+		totalAffected += int(affected)
 	}
 
-	return affected, txn.Commit()
+	return totalAffected, txn.Commit()
 }
 
 // Only used in benchmarks

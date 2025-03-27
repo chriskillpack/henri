@@ -7,8 +7,6 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
-	"image"
-	_ "image/jpeg"
 	"log"
 	"net"
 	"net/http"
@@ -257,19 +255,3 @@ func splitByNewline(s string) []string {
 
 // Returns the dimensions of the JPEG at imgPath.
 // TODO - this should be stored in the DB as part of injestion.
-func imageDimensions(imgPath string) (w int, h int, err error) {
-	var f *os.File
-
-	f, err = os.Open(imgPath)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	jpg, _, err := image.Decode(f)
-	bounds := jpg.Bounds()
-	w = bounds.Max.X
-	h = bounds.Max.Y
-
-	return
-}

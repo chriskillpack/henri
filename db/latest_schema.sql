@@ -6,7 +6,9 @@ CREATE TABLE images (
     processed_at TIMESTAMP,
     attempted_at TIMESTAMP,
     describer VARCHAR,
-    model VARCHAR
+    model VARCHAR,
+    image_width INTEGER,
+    image_height INTEGER
 );
 
 CREATE UNIQUE INDEX images_image_path_model_index

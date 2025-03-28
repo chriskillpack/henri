@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	_ "image/jpeg"
+	_ "image/png" // see imageDimensions()
 	"io/fs"
 	"log"
 	"net/http"
@@ -58,13 +60,22 @@ var (
 	lameduck bool
 )
 
-// Walk the filesystem from root finding all JPEG files. The results include the JPEG image dimensions.
-func findJpegFiles(root string) ([]henri.ImagePath, error) {
-	var results []henri.ImagePath
+// Walk the filesystem from root finding all supported image files.
+func findAndInsertImageFiles(ctx context.Context, root string, db *henri.DB) (int, error) {
+	var (
+		results []henri.ImagePath
+		nn      int
+	)
 
 	err := filepath.Walk(root, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return filepath.SkipAll
+		default:
 		}
 
 		ext := strings.ToLower(filepath.Ext(path))
@@ -74,26 +85,46 @@ func findJpegFiles(root string) ([]henri.ImagePath, error) {
 				Modtime: info.ModTime(),
 			}
 
-			// Retrieve the JPEG image dimensions
+			// Retrieve the image dimensions
 			var (
 				w, h int
 			)
 			w, h, err = imageDimensions(path)
 			if err != nil {
-				return err
+				return fmt.Errorf("error reading image dimensions of %s - %s", path, err)
 			}
 			result.Width = w
 			result.Height = h
 
 			results = append(results, result)
+			if len(results) == 200 {
+				// Write this batch to the DB
+				n, err := db.InsertImagePaths(ctx, results, len(results))
+				if err != nil {
+					return err
+				}
+				nn += n
+				results = results[:0]
+			}
 		}
 
 		return nil
 	})
 
-	return results, err
+	if len(results) > 0 {
+		n, err := db.InsertImagePaths(ctx, results, len(results))
+		if err != nil {
+			return 0, err
+		}
+		nn += n
+	}
+
+	return nn, err
 }
 
+// Retrieve the dimensions of the images
+// Most of the time this will be JPEGs but in my photo library I found at least two PNGs that had a JPEG extension.
+// Those should still be included.
 func imageDimensions(imgPath string) (w int, h int, err error) {
 	var f *os.File
 
@@ -103,8 +134,13 @@ func imageDimensions(imgPath string) (w int, h int, err error) {
 	}
 	defer f.Close()
 
-	jpg, _, err := image.Decode(f)
-	bounds := jpg.Bounds()
+	var img image.Image
+	img, _, err = image.Decode(f)
+	if err != nil {
+		return
+	}
+
+	bounds := img.Bounds()
 	w = bounds.Max.X
 	h = bounds.Max.Y
 
@@ -166,19 +202,11 @@ func run(ctx context.Context, mode AppMode, h *henri.Henri) error {
 		if len(os.Args) < 2 {
 			return fmt.Errorf("missing library path to scan")
 		}
-		imagepaths, err := findJpegFiles(os.Args[2])
+		imagecount, err := findAndInsertImageFiles(ctx, os.Args[2], h.DB)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Found %d images on disk\n", len(imagepaths))
-
-		const batchSize = 100
-		added, err := h.DB.InsertImagePaths(ctx, imagepaths, batchSize)
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("Added %d new images\n", added)
+		fmt.Printf("Added %d new images\n", imagecount)
 		return nil
 	}
 

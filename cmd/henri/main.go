@@ -76,6 +76,9 @@ func findAndInsertImageFiles(ctx context.Context, root string, db *henri.DB) (in
 		case <-ctx.Done():
 			return filepath.SkipAll
 		default:
+			if lameduck {
+				return filepath.SkipAll
+			}
 		}
 
 		ext := strings.ToLower(filepath.Ext(path))

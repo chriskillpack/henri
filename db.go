@@ -121,14 +121,15 @@ type DB struct {
 
 // Image is an in-memory representation of a row in the images table.
 type Image struct {
-	Id          int
-	Path        string
-	PathMTime   time.Time
-	Description string
-	ProcessedAt sql.NullTime
-	AttemptedAt sql.NullTime
-	Model       string
-	Describer   string
+	Id            int
+	Path          string
+	PathMTime     time.Time
+	Description   string
+	ProcessedAt   sql.NullTime
+	AttemptedAt   sql.NullTime
+	Model         string
+	Describer     string
+	Width, Height sql.NullInt16
 
 	Embedding *Embedding // optional reference
 }
@@ -292,7 +293,7 @@ func (db *DB) UpdateImageAttempted(ctx context.Context, id int, model, describer
 func (db *DB) GetImage(ctx context.Context, id int) (*Image, error) {
 	row := db.db.QueryRowContext(ctx, `
 		SELECT image_path, image_mtime, image_description, processed_at,
-		       attempted_at, describer, model
+		       attempted_at, describer, model, image_width, image_height
 		FROM images
 		WHERE id=$1`, id)
 
@@ -311,6 +312,8 @@ func (db *DB) GetImage(ctx context.Context, id int) (*Image, error) {
 		&img.AttemptedAt,
 		&img.Describer,
 		&img.Model,
+		&img.Width,
+		&img.Height,
 	)
 	if err != nil {
 		return nil, err
@@ -325,7 +328,8 @@ func (db *DB) GetImage(ctx context.Context, id int) (*Image, error) {
 func (db *DB) DescribedImagesMissingEmbeddings(ctx context.Context, model string) ([]*Image, error) {
 	query := `
 		SELECT i.id, i.image_path, i.image_mtime, i.image_description,
-		       i.processed_at, i.attempted_at, i.model, i.describer
+		       i.processed_at, i.attempted_at, i.model, i.describer,
+		       i.image_width, i.image_height
 		FROM images i
 		LEFT JOIN embeddings e ON i.id=e.image_id AND e.model=$1
 		WHERE i.image_description IS NOT NULL AND e.id IS NULL`
@@ -350,6 +354,8 @@ func (db *DB) DescribedImagesMissingEmbeddings(ctx context.Context, model string
 			&img.AttemptedAt,
 			&img.Model,
 			&img.Describer,
+			&img.Width,
+			&img.Height,
 		)
 		if err != nil {
 			return nil, err
@@ -495,7 +501,7 @@ func (db *DB) loadEmbeddingsForBatch(ctx context.Context, model string, batchSiz
 	rows, err := db.db.QueryContext(ctx, `
 		SELECT e.id, e.image_id, e.vector, e.processed_at,
 		       i.id, i.image_path, i.image_mtime, i.image_description, i.processed_at, i.attempted_at,
-		       i.describer, i.model
+		       i.describer, i.model, i.image_width, i.image_height
 		FROM embeddings e
 		INNER JOIN images i ON e.image_id=i.id
 		WHERE e.model=$1 AND e.id > $2
@@ -525,6 +531,8 @@ func (db *DB) loadEmbeddingsForBatch(ctx context.Context, model string, batchSiz
 			&img.AttemptedAt,
 			&img.Describer,
 			&img.Model,
+			&img.Width,
+			&img.Height,
 		)
 		if err != nil {
 			return EmbeddingBatch{}, fmt.Errorf("scanning rows - %w", err)
@@ -586,7 +594,8 @@ func (db *DB) GetEmbeddingsWithImages(ctx context.Context, ids ...int) (map[int]
 	query := fmt.Sprintf(`
 		SELECT e.id,e.image_id,e.model,e.processed_at,
 		       i.id,i.image_path,i.image_mtime,i.image_description,
-		       i.processed_at,i.attempted_at,i.model,i.describer
+		       i.processed_at,i.attempted_at,i.model,i.describer,
+		       i.image_width,i.image_height
 		FROM embeds e
 		INNER JOIN images i ON e.image_id=i.id
 		WHERE e.id IN (%s)`,
@@ -616,6 +625,8 @@ func (db *DB) GetEmbeddingsWithImages(ctx context.Context, ids ...int) (map[int]
 			&img.AttemptedAt,
 			&img.Model,
 			&img.Describer,
+			&img.Width,
+			&img.Height,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning embeddings and images: %w", err)

@@ -102,17 +102,12 @@ func (s *Server) serveSearch() http.HandlerFunc {
 			Results []searchresult
 		}{Results: make([]searchresult, 5)}
 		for i, es := range topk.GetTopK() {
-			w, h, err := imageDimensions(es.embed.Image.Path)
-			if err != nil {
-				continue
-			}
-
 			results.Results[i].Description = splitByNewline(es.embed.Image.Description)
 			results.Results[i].Score = es.score
 			results.Results[i].ImageURL = fmt.Sprintf("/image/%d", es.embed.ImageId)
 
 			cssClass := "img-landscape"
-			if h > w {
+			if es.embed.Image.Height.Int16 > es.embed.Image.Width.Int16 {
 				cssClass = "img-portrait"
 			}
 			results.Results[i].ImageCSSClass = cssClass

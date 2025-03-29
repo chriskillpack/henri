@@ -2,6 +2,12 @@
 
 # This is a one-time script to populate the image_width and height columns of the
 # image table, as data backfill. This script was written by Claude.AI.
+# To run:
+# $ python3 -m venv venv
+# $ source venv/bin/activate
+# $ pip install Pillow
+# $ python3 update_image_dimensions.py /path/to/your/database.db
+# $ deactivate
 
 import os
 import sqlite3

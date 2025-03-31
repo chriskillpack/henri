@@ -26,9 +26,10 @@ var (
 	rl *ratelimiter.Limiter // For requests to the OpenAI API
 
 	// This map has dual purposes, first is to define which models are used
-	// and two the size of the embedding vectors we wish
+	// and two the size of the embedding vectors we wish. A value of -1 means
+	// use the default length
 	modelDimensions = map[string]int{
-		"text-embedding-3-small": 512,
+		"text-embedding-3-small": -1,
 	}
 )
 
@@ -67,10 +68,14 @@ func (o *openai) Embeddings(ctx context.Context, description string) ([]float32,
 	}
 
 	enp := oagc.EmbeddingNewParams{
-		Input:      oagc.F(oagc.EmbeddingNewParamsInputUnion(oagc.EmbeddingNewParamsInputArrayOfStrings{description})),
-		Model:      oagc.F(oagc.EmbeddingModel(o.model)),
-		Dimensions: oagc.Int(int64(modelDimensions[o.model])),
+		Input: oagc.F(oagc.EmbeddingNewParamsInputUnion(oagc.EmbeddingNewParamsInputArrayOfStrings{description})),
+		Model: oagc.F(oagc.EmbeddingModel(o.model)),
 	}
+	embedLen := modelDimensions[o.model]
+	if embedLen != -1 {
+		enp.Dimensions = oagc.Int(int64(embedLen))
+	}
+
 	resp, err := o.oac.Embeddings.New(ctx, enp)
 	if err != nil {
 		return nil, err
